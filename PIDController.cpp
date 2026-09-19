@@ -88,15 +88,6 @@ bool PIDController::compute(float setpoint, float measurement) {
     // Clamp output to configured limits
     _output = CLAMP(_output, _outputMin, _outputMax);
 
-    // Additional anti-windup: if output is saturated and error
-    // is pushing further into saturation, stop integrating.
-    if ((_output >= _outputMax && error > 0) ||
-        (_output <= _outputMin && error < 0)) {
-        // Undo the integration step to prevent further windup
-        _iTerm -= _ki * error * dt;
-        _iTerm = CLAMP(_iTerm, _outputMin, _outputMax);
-    }
-
     // Store state for next iteration
     _lastMeasurement = measurement;
     _lastComputeTime = now;

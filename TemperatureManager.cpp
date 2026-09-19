@@ -135,7 +135,22 @@ void TemperatureManager::update() {
             // Read the result
             float reading = _sensors.getTempCByIndex(0);
 
-            if (validateReading(reading)) {
+            // Reject an implausible jump vs. the last accepted reading
+            // (e.g. electrical glitch on the 1-Wire bus) — but only once
+            // we actually have a prior reading to compare against.
+            bool jumpRejected = false;
+            if (validateReading(reading) && _filterCount > 0) {
+                float calibratedCheck = reading + _calOffset;
+                if (fabsf(calibratedCheck - _rawTemp) > TEMP_INVALID_THRESH) {
+                    jumpRejected = true;
+                    Serial.printf("[TEMP] Rejected implausible jump: %.2f -> %.2f "
+                                  "(delta %.2f > %.2f max/sample)\n",
+                                  _rawTemp, calibratedCheck,
+                                  fabsf(calibratedCheck - _rawTemp), TEMP_INVALID_THRESH);
+                }
+            }
+
+            if (validateReading(reading) && !jumpRejected) {
                 // Apply calibration offset
                 float calibrated = reading + _calOffset;
                 _rawTemp = calibrated;

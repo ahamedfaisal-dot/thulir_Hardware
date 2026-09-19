@@ -82,6 +82,13 @@
 #define HOT_SIDE_MAX_TEMP       75.0f  // °C — shut down Peltiers above this
 #define HOT_SIDE_RECOVERY_TEMP  50.0f  // °C — allow restart below this
 
+// Cold-side sanity ceiling — catches a cold-side reading that's gone
+// implausibly high (e.g. heatsink/airflow failure feeding back into the
+// cold side). Deliberately its own constant, separate from
+// HOT_SIDE_MAX_TEMP, since the cold side should never legitimately be
+// anywhere near a hot-side limit (normal range here is -20..+25°C).
+#define COLDSIDE_SANITY_MAX_TEMP 45.0f  // °C
+
 // ============================================================
 //  GPIO PIN CONFIGURATION
 // ============================================================
@@ -241,8 +248,9 @@
 // ============================================================
 //  TEMPERATURE SETTINGS
 // ============================================================
-#define TEMP_READ_INTERVAL_MS    200    // DS18B20 read request cycle
-#define TEMP_CONVERSION_MS       750    // 12-bit conversion time
+#define TEMP_CONVERSION_MS       750    // 12-bit conversion time; also paces
+                                         // the async request/read cycle —
+                                         // there is no separate read interval
 #define TEMP_FILTER_SAMPLES        5    // Moving-average window
 
 #define TEMP_SENSOR_MIN        -40.0f   // Valid range low
@@ -274,6 +282,12 @@
 #define RAMP_FINAL_TARGET      -20.0f   // °C
 #define RAMP_UPDATE_INTERVAL_MS  100    // Setpoint update rate
 #define RAMP_LAG_THRESHOLD      2.0f    // °C behind setpoint → warning
+
+//  Safety backstop: worst case (Step 4 at 25°C to -20°C) is 45 minutes
+//  of nominal ramp time. If the ramp is still running after this long,
+//  something is physically wrong (can't reach target) — fault out
+//  rather than run indefinitely at high cooling demand.
+#define RAMP_MAX_DURATION_MS   (150UL * 60000UL)   // 150 minutes
 
 // ============================================================
 //  DEFAULT RECIPE (hold times in minutes)
@@ -401,7 +415,8 @@ enum ErrorCode {
     ERROR_DFPLAYER,
     ERROR_DISPLAY,
     ERROR_INVALID_RECIPE,
-    ERROR_EMERGENCY_STOP
+    ERROR_EMERGENCY_STOP,
+    ERROR_RAMP_TIMEOUT
 };
 
 enum ScreenID {
@@ -573,6 +588,7 @@ inline const char* getErrorName(ErrorCode e) {
         case ERROR_DISPLAY:           return "DISPLAY";
         case ERROR_INVALID_RECIPE:    return "INVALID RECIPE";
         case ERROR_EMERGENCY_STOP:    return "EMERGENCY STOP";
+        case ERROR_RAMP_TIMEOUT:      return "RAMP TIMEOUT";
         default:                      return "UNKNOWN ERROR";
     }
 }

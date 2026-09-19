@@ -20,6 +20,16 @@ void RecipeManager::begin() {
     if (initialized) {
         loadFromNVS();
         Serial.println("[RECIPE] Loaded recipe from NVS");
+
+        // Sanity-check the loaded recipe immediately rather than only at
+        // startProcess() time — a corrupted NVS blob should be caught at
+        // boot, not silently carried around until the user tries to start.
+        if (!validateRecipe()) {
+            Serial.println("[RECIPE] Loaded recipe FAILED validation — "
+                            "resetting to factory defaults");
+            initializeDefaults();
+            saveToNVS();
+        }
     } else {
         initializeDefaults();
         saveToNVS();

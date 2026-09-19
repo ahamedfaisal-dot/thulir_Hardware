@@ -61,7 +61,8 @@ bool SafetyManager::update(const TemperatureManager& tempMgr,
         if (status.state == STATE_STEP_APPROACH ||
             status.state == STATE_STEP_HOLD ||
             status.state == STATE_STEP5_RAMP ||
-            status.state == STATE_STEP_TRANSITION) {
+            status.state == STATE_STEP_TRANSITION ||
+            status.state == STATE_TEST_MODE) {
             triggerFault(ERROR_TEMP_SENSOR, peltier, audio, status);
             return false;
         }
@@ -83,7 +84,7 @@ bool SafetyManager::update(const TemperatureManager& tempMgr,
     // --- Check 3: Cold-side over-temperature ---
     // If the cold side somehow reads very high (e.g., heatsink failure),
     // shut down to prevent thermal damage to the Peltier stack.
-    if (temp > HOT_SIDE_MAX_TEMP && peltier.isActive()) {
+    if (temp > COLDSIDE_SANITY_MAX_TEMP && peltier.isActive()) {
         triggerFault(ERROR_OVER_TEMP, peltier, audio, status);
         return false;
     }
@@ -159,6 +160,12 @@ void SafetyManager::emergencyStop(PeltierControl& peltier,
 
     // Play emergency stop audio
     audio.announceEmergencyStop();
+}
+
+void SafetyManager::triggerRampTimeoutFault(PeltierControl& peltier,
+                                             AudioManager& audio,
+                                             SystemStatus& status) {
+    triggerFault(ERROR_RAMP_TIMEOUT, peltier, audio, status);
 }
 
 bool SafetyManager::acknowledgeFault(SystemStatus& status) {

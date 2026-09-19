@@ -15,6 +15,7 @@ AudioManager::AudioManager()
     , _playing(false)
     , _lastPlayTime(0)
     , _lastTrack(0)
+    , _pendingTrack(0)
 {
 }
 
@@ -60,6 +61,16 @@ void AudioManager::update() {
         // The DFPlayer doesn't provide a reliable "done" signal,
         // so we use a minimum interval between announcements.
         _playing = false;
+
+        // If a track was requested while we were still "playing" the
+        // previous one, it was throttled rather than dropped — play it
+        // now instead of silently losing it (e.g. Step 5's "ramp started"
+        // announcement immediately following the "step 5" announcement).
+        if (_pendingTrack != 0) {
+            uint16_t track = _pendingTrack;
+            _pendingTrack = 0;
+            playTrack(track);
+        }
     }
 
     // Check for DFPlayer errors (non-blocking read)
@@ -112,7 +123,8 @@ void AudioManager::playTrack(uint16_t track) {
     // Enforce minimum interval between announcements
     unsigned long now = millis();
     if (_playing && (now - _lastPlayTime) < AUDIO_MIN_INTERVAL) {
-        Serial.printf("[AUDIO] Skipping track %d (too soon after %d)\n",
+        _pendingTrack = track;
+        Serial.printf("[AUDIO] Deferring track %d (too soon after %d) — will play next\n",
                       track, _lastTrack);
         return;
     }

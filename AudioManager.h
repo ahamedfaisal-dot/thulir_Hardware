@@ -70,4 +70,7 @@ private:
     bool                _playing;
     unsigned long       _lastPlayTime;
     uint16_t            _lastTrack;
+    uint16_t            _pendingTrack;  // 0 = none; a track throttled by
+                                         // AUDIO_MIN_INTERVAL that should
+                                         // still play once the window clears
 };

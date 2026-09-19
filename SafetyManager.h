@@ -51,6 +51,13 @@ public:
                        AudioManager& audio,
                        SystemStatus& status);
 
+    // Trigger a fault from outside the periodic update() check — e.g. the
+    // Step 5 ramp exceeding its maximum allowed duration. Same effect as
+    // an internally-detected fault: Peltiers off, state -> FAULT.
+    void triggerRampTimeoutFault(PeltierControl& peltier,
+                                  AudioManager& audio,
+                                  SystemStatus& status);
+
     // Acknowledge and clear a fault (user action required)
     bool acknowledgeFault(SystemStatus& status);
 

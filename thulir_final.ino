@@ -377,11 +377,13 @@ void loop() {
 // ============================================================
 
 void handleKeypress(char key) {
-    // Emergency stop: C key during active process on home screen
+    // Emergency stop: C key during an active process, from ANY screen —
+    // must not require navigating back to HOME first.
     if (key == KEY_BACK &&
-        sysStatus.currentScreen == SCREEN_HOME &&
+        sysStatus.currentScreen != SCREEN_CONFIRM_STOP &&
         (sysStatus.state == STATE_STEP_APPROACH ||
          sysStatus.state == STATE_STEP_HOLD ||
+         sysStatus.state == STATE_STEP_TRANSITION ||
          sysStatus.state == STATE_STEP5_RAMP)) {
         showScreen(SCREEN_CONFIRM_STOP);
         return;
@@ -1025,6 +1027,17 @@ void updateHoldState() {
 
 void updateRampState() {
     unsigned long now = millis();
+
+    // Safety backstop: if the ramp has been running far longer than any
+    // realistic scenario allows, the target is physically unreachable —
+    // fault out instead of running indefinitely at high cooling demand.
+    if ((now - sysStatus.rampStartTime) >= RAMP_MAX_DURATION_MS) {
+        Serial.printf("[STEP 5] RAMP TIMEOUT after %lu min — target unreachable\n",
+                      (now - sysStatus.rampStartTime) / 60000UL);
+        safetyMgr.triggerRampTimeoutFault(peltier, audioMgr, sysStatus);
+        showScreen(SCREEN_FAULT);
+        return;
+    }
 
     // Update ramp setpoint continuously
     float elapsedMin = (now - sysStatus.rampStartTime) / 60000.0f;
