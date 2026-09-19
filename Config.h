@@ -94,11 +94,23 @@
 // ============================================================
 //
 //  ESP32-S3 GPIO notes:
-//    GPIO 0       : Boot strapping — avoid
+//    GPIO 0       : Boot strapping (download mode) — avoid pull-ups/downs
+//    GPIO 3       : Boot strapping (JTAG signal source) — avoid pull-ups/
+//                   downs; an external I2C pull-up here broke esptool's
+//                   download-mode handshake in testing on this board
 //    GPIO 19, 20  : USB D−/D+ on DevKitC-1 — avoid
 //    GPIO 26–32   : Do NOT exist on ESP32-S3 (internal flash/PSRAM)
-//    GPIO 33–37   : Available on most S3 modules (SPI-capable)
-//    GPIO 38–48   : Available on most S3 modules
+//    GPIO 33, 34  : NOT broken out on this specific ESP32-S3-DevKitC-1
+//                   board at all (confirmed from the board's own pinout
+//                   diagram) — this module reserves them internally for
+//                   PSRAM. Do not use even if you think you've wired them.
+//    GPIO 35–37   : Confirmed present on this board's header and free —
+//                   used here for the SHT3x (SDA=35, SCL=36)
+//    GPIO 38–44, 47, 48 : Available on most S3 modules
+//    GPIO 45      : Boot strapping (VDD_SPI voltage) — avoid pull-ups
+//    GPIO 46      : Boot strapping (ROM boot-log verbosity) — lower risk
+//                   than GPIO0/3/45, but still best avoided if a free
+//                   non-strapping pin is available
 //
 //  If your specific board maps any of these pins differently,
 //  change ONLY this section — the rest of the code uses these
@@ -128,16 +140,27 @@
 
 // --- SHT3x Temperature + Humidity Sensor (cold side) --------
 //  I2C sensor — replaces the DS18B20 for cold-side sensing.
-//  GPIO3 was freed by removing the DS18B20 1-Wire connection.
-//  GPIO46 is a boot-strapping pin (selects ROM boot-log verbosity);
-//  pulling it via the I2C bus's pull-up resistors only affects boot
-//  log printing, not board function — safe to use for SCL.
+//
+//  GPIO3/GPIO46 were tried first but BOTH are ESP32-S3 strapping pins
+//  (GPIO3 = JTAG signal source select). The SHT3x's I2C pull-up
+//  resistors altered GPIO3's strap state on every reset, breaking the
+//  USB download-mode handshake esptool uses to flash ("Wrong boot mode
+//  detected (0x4)").
+//
+//  GPIO33/34 were tried next, but this board's own silkscreen/pinout
+//  (ESP32-S3-DevKitC-1) doesn't break them out at all — this specific
+//  WROOM-1 module reserves them internally (Quad PSRAM data lines).
+//
+//  Settled on GPIO35/36: this board's header DOES expose GPIO35-37
+//  (unlike 33/34), which means this module's PSRAM only needs 33/34 —
+//  35-37 are genuinely free general-purpose GPIOs here. Not strapping
+//  pins, not reserved by this module's PSRAM, not used elsewhere.
 //    VIN → 3.3V (2.2–5.5V tolerant, but board logic is 3.3V here)
 //    GND → GND
-//    SDA → GPIO 3
-//    SCL → GPIO 46
-#define SHT3X_SDA_PIN      3
-#define SHT3X_SCL_PIN      46
+//    SDA → GPIO 35
+//    SCL → GPIO 36
+#define SHT3X_SDA_PIN      35
+#define SHT3X_SCL_PIN      36
 #define SHT3X_I2C_ADDR     0x44   // Default SHT3x address (0x45 if ADDR pin high)
 
 // --- DS18B20 Hot-side sensor (optional, future) -------------

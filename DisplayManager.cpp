@@ -143,13 +143,15 @@ void DisplayManager::drawHomeScreen(const SystemStatus& status) {
 
     drawDivider(22);
 
-    // --- Temperature labels ---
+    // --- Temperature + Humidity labels ---
     _tft->setTextSize(1);
     _tft->setTextColor(COLOR_TEXT_SECONDARY, COLOR_BG);
-    _tft->setCursor(10, 26);
-    _tft->print("ACTUAL TEMP");
-    _tft->setCursor(180, 26);
-    _tft->print("TARGET TEMP");
+    _tft->setCursor(6, 26);
+    _tft->print("ACTUAL");
+    _tft->setCursor(114, 26);
+    _tft->print("HUMIDITY");
+    _tft->setCursor(196, 26);
+    _tft->print("TARGET");
 
     drawDivider(58);
 
@@ -252,42 +254,42 @@ void DisplayManager::updateHomeScreen(const SystemStatus& status) {
         drawDivider(132);
     }
 
-    // --- Humidity (header, middle gap between title and state name) ---
-    if (fabsf(status.humidity - _lastHumidity) > 0.5f) {
-        _tft->fillRect(120, 3, 100, 14, COLOR_HEADER_BG);
-        _tft->setTextSize(1);
-        _tft->setCursor(120, 6);
-        if (status.humidityValid) {
-            _tft->setTextColor(COLOR_TEXT_SECONDARY, COLOR_HEADER_BG);
-            snprintf(buf, sizeof(buf), "RH:%.0f%%", status.humidity);
-        } else {
-            _tft->setTextColor(COLOR_TEXT_DIM, COLOR_HEADER_BG);
-            snprintf(buf, sizeof(buf), "RH:--");
-        }
-        _tft->print(buf);
-        _lastHumidity = status.humidity;
-    }
-
     // --- Actual Temperature ---
     if (fabsf(status.filteredTemp - _lastActualTemp) > 0.05f) {
-        clearValueArea(10, 36, 150, 20);
+        clearValueArea(6, 36, 104, 20);
         formatTemp(status.filteredTemp, buf, sizeof(buf));
         _tft->setTextSize(2);
         _tft->setTextColor(COLOR_TEMP_ACTUAL, COLOR_BG);
-        _tft->setCursor(10, 38);
+        _tft->setCursor(6, 38);
         _tft->print(buf);
         _lastActualTemp = status.filteredTemp;
+    }
+
+    // --- Humidity (between ACTUAL and TARGET) ---
+    if (fabsf(status.humidity - _lastHumidity) > 0.5f) {
+        clearValueArea(114, 36, 78, 20);
+        _tft->setTextSize(2);
+        _tft->setCursor(114, 38);
+        if (status.humidityValid) {
+            _tft->setTextColor(COLOR_TEXT_SECONDARY, COLOR_BG);
+            snprintf(buf, sizeof(buf), "%.0f%%", status.humidity);
+        } else {
+            _tft->setTextColor(COLOR_TEXT_DIM, COLOR_BG);
+            snprintf(buf, sizeof(buf), "--");
+        }
+        _tft->print(buf);
+        _lastHumidity = status.humidity;
     }
 
     // --- Target Temperature ---
     float displayTarget = (status.state == STATE_STEP5_RAMP)
                           ? status.currentSetpoint : status.targetTemp;
     if (fabsf(displayTarget - _lastTargetTemp) > 0.05f) {
-        clearValueArea(180, 36, 140, 20);
+        clearValueArea(196, 36, 124, 20);
         formatTemp(displayTarget, buf, sizeof(buf));
         _tft->setTextSize(2);
         _tft->setTextColor(COLOR_TEMP_TARGET, COLOR_BG);
-        _tft->setCursor(180, 38);
+        _tft->setCursor(196, 38);
         _tft->print(buf);
         _lastTargetTemp = displayTarget;
     }

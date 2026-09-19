@@ -87,8 +87,8 @@ Production-quality firmware for ESP32-S3 driving three cascaded Peltier modules 
 |                          | GND            | GND                   | Common ground                                                 |
 | **SHT3x (Cold side, Temp+Humidity)** | VIN | 3.3V                  | 2.2–5.5V tolerant sensor, powered at 3.3V here                |
 |                          | GND            | GND                   |                                                                |
-|                          | SDA            | GPIO 3                | I2C data (freed from the old DS18B20 1-Wire pin)              |
-|                          | SCL            | GPIO 46               | I2C clock — see GPIO Pin Map note on GPIO46                   |
+|                          | SDA            | **GPIO 35**           | GPIO3 (strapping pin, broke uploads) and GPIO33 (not broken out on this board) were tried first |
+|                          | SCL            | **GPIO 36**           | Confirmed present and free on this board's actual pinout diagram |
 | **DS18B20 (Hot side, optional)** | DATA   | GPIO 43               | Not installed by default — set `HOT_SIDE_SENSOR_ENABLED true` in Config.h to use |
 |                          | VCC            | 3.3V                  |                                                                |
 |                          | GND            | GND                   |                                                                |
@@ -170,21 +170,34 @@ See `Config.h` for the authoritative, editable pin definitions.
 
 **ESP32-S3 Pins to Avoid:**
 
-- GPIO 0: Boot strapping pin
+- GPIO 0: Boot strapping pin (download mode) — avoid pull-ups/downs
+- GPIO 3: Boot strapping pin (JTAG signal source) — **learned the hard
+  way**: this was originally used for the SHT3x's I2C SDA, and its
+  external pull-up resistor altered this pin's strap state on every
+  reset, breaking `esptool`'s USB download-mode handshake entirely
+  ("Wrong boot mode detected (0x4)", uploads failed completely). Avoid
+  any pull-up/pull-down on GPIO3.
 - GPIO 19: USB D− on DevKitC-1
 - GPIO 26–32: Do not exist on ESP32-S3 (internal flash)
-- GPIO 33–37: **Reserved for Octal PSRAM** on ESP32-S3-WROOM-1 R8 modules — do not use for external signals
+- GPIO 33, 34: **Not broken out at all on this ESP32-S3-DevKitC-1 board**
+  (confirmed from the board's own pinout diagram — these two pins simply
+  don't appear on the header). This module reserves them internally for
+  PSRAM. Also tried and abandoned for the SHT3x before settling on 35/36.
+- GPIO 35–37: Present on this board's header and genuinely free — the
+  fact that the board omits 33/34 but keeps 35-37 confirms this module
+  only needs 33/34 for PSRAM. **This firmware uses GPIO 35/36 for the
+  SHT3x's SDA/SCL.**
 - GPIO 43, 44: Default UART0 TX/RX — only reserved if your board setting uses
   UART0 for Serial. With **USB Mode: "Hardware CDC and JTAG"** (as specified
   below), `Serial` runs over native USB instead, so these pins are free —
   this firmware uses GPIO 43 (hot-side sensor, optional) and GPIO 44
   (BTS7960 #3 R_EN) safely under that board setting.
-- GPIO 45, 46: Boot-strapping pins (VDD_SPI voltage select / ROM boot-log
-  verbosity). GPIO 46 is used here for the SHT3x's I2C SCL — its I2C
-  pull-up only affects boot-log print verbosity, not board function, so
-  this is safe. **Do not use GPIO 45** for anything with a pull-up
-  resistor (I2C, etc.) — pulling it high at boot can select the wrong
-  VDD_SPI voltage and break flash access on some modules.
+- GPIO 45: Boot strapping pin (VDD_SPI voltage select) — do not use with a
+  pull-up/pull-down; pulling it high at boot can select the wrong VDD_SPI
+  voltage and break flash access on some modules.
+- GPIO 46: Boot strapping pin (ROM boot-log verbosity) — lower risk than
+  GPIO0/3/45, but not used by this firmware (freed back up when the SHT3x
+  moved to GPIO35/36).
 
 **Why the TFT uses GPIO 9/10/11/12/13/14:**
 - These are the pins proven to actually work with this ILI9341 panel on this
@@ -424,7 +437,7 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 | No backlight at all   | Display VCC/LED not powered                  | Confirm VCC is on **5V** and LED is on 3.3V — a floating/unpowered rail gives a totally dark panel |
 | Backlight on, screen white | Panel powered but not initializing            | Verify wiring against the table above; run the `TEST_MODE 2` bring-up test in `thulir_final.ino` and check `[TEST] Display ID bytes` in Serial — `0x00 0x00 0x00` means the panel isn't responding at all |
 | Backlight on, screen black (static, never changes) | Same as above — panel at its power-up default, not receiving commands | Same as above |
-| PSRAM pin conflict    | Using GPIO 33–37 for other signals           | Do NOT use GPIO 33–37 for anything on ESP32-S3-WROOM-1 R8 (Octal PSRAM) modules |
+| PSRAM pin conflict    | Using GPIO 33/34 for other signals           | This board doesn't even break these out — confirmed unusable regardless. GPIO 35–37 are confirmed free and safe on this board |
 | Garbled display       | Wrong rotation                               | Change `setRotation()` in `DisplayManager::begin()`                      |
 | Wrong colors          | RGB vs BGR byte order                        | Adafruit_ILI9341 defaults to RGB; check the panel datasheet if colors look swapped |
 | Flickering            | Full redraw too often                        | Increase `DISPLAY_UPDATE_INTERVAL` in Config.h                           |
