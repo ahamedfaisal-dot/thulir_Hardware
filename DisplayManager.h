@@ -32,9 +32,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include <SPI.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_ILI9341.h>
+#include <TFT_eSPI.h>   // Bodmer's TFT_eSPI — pins configured via User_Setup.h
 #include "Config.h"
 
 class DisplayManager {
@@ -68,11 +66,10 @@ public:
     void drawBar(int x, int y, int w, int h, float percent, uint16_t fillColor);
 
     // Get the underlying TFT object for advanced use
-    Adafruit_ILI9341* getTFT();
+    TFT_eSPI* getTFT();
 
 private:
-    SPIClass*          _spi;
-    Adafruit_ILI9341*  _tft;
+    TFT_eSPI*          _tft;
     ScreenID           _currentScreen;
     unsigned long      _messageExpiry;
 

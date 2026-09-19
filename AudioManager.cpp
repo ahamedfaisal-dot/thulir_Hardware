@@ -43,7 +43,7 @@ bool AudioManager::begin() {
     }
 
     _player->volume(DFPLAYER_VOLUME);
-    _player->outputDevice(DFMP3_DEVICE_SD);
+    _player->outputDevice(DFPLAYER_DEVICE_SD);
 
     _available = true;
     Serial.printf("[AUDIO] DFPlayer Mini initialized. Volume: %d\n", DFPLAYER_VOLUME);

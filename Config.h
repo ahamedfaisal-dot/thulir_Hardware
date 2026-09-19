@@ -108,11 +108,15 @@
 #define MIDDLE_RPWM_PIN    8
 #define MIDDLE_LPWM_PIN    9
 #define MIDDLE_REN_PIN     10
-#define MIDDLE_LEN_PIN     11
+// MIDDLE_LEN_PIN: always HIGH — hardwire this BTS7960 pin directly to 3.3V.
+// GPIO11 is reclaimed for TFT MOSI (native FSPI pin).
+// #define MIDDLE_LEN_PIN  11   // ← freed; wire BTS7960 L_EN to 3.3V
 
 // --- BTS7960 #3 — TOP Peltier (12V / 6A rated) -------------
 #define TOP_RPWM_PIN       12
-#define TOP_LPWM_PIN       13
+// TOP_LPWM_PIN: always LOW — hardwire this BTS7960 pin directly to GND.
+// GPIO13 is reclaimed for TFT SCK (native FSPI CLK pin).
+// #define TOP_LPWM_PIN    13   // ← freed; wire BTS7960 LPWM to GND
 #define TOP_REN_PIN        14
 #define TOP_LEN_PIN        15
 
@@ -124,13 +128,22 @@
 #define DS18B20_HOT_PIN    43   // Change when installed
 
 // --- TFT Display (2.8" ILI9341 SPI, 320×240) ---------------
-//  Uses HSPI (SPI3) peripheral on ESP32-S3.
-//  Backlight assumed always-on (wired to 3.3V or VCC on module).
-#define TFT_SCK_PIN        36
-#define TFT_MOSI_PIN       35
-#define TFT_MISO_PIN       37
-#define TFT_CS_PIN         34
-#define TFT_DC_PIN         33
+//  Uses TFT_eSPI library (Bodmer). Pin config lives in User_Setup.h
+//  which must be copied to the TFT_eSPI library directory.
+//
+//  Physical wiring:
+//    TFT MOSI  → GPIO 11  (native FSPI MOSI; MIDDLE_LEN hardwired to 3.3V)
+//    TFT SCK   → GPIO 13  (native FSPI CLK;  TOP_LPWM  hardwired to GND)
+//    TFT MISO  → not connected (write-only display)
+//    TFT CS    → GPIO 47
+//    TFT DC    → GPIO 48
+//    TFT RST   → GPIO 21
+//    TFT LED   → 3.3V
+//
+//  Note: TFT_eSPI reads pin numbers from User_Setup.h in the library
+//  folder, NOT from these defines. These are kept as documentation only.
+#define TFT_CS_PIN         47
+#define TFT_DC_PIN         48
 #define TFT_RST_PIN        21
 
 // --- 4×4 Matrix Keypad --------------------------------------

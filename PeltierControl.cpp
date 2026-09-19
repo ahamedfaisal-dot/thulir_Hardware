@@ -5,16 +5,15 @@
  * ============================================================
  *  Uses ESP32 LEDC peripheral for hardware PWM generation.
  *
- *  Arduino-ESP32 Core 3.x API:
- *    ledcAttach(pin, freq, resolution)
- *    ledcWrite(pin, duty)
- *    ledcDetach(pin)
- *
- *  If you are using Core 2.x, you will need to adapt to the
- *  channel-based API:
+ *  Arduino-ESP32 Core 2.x API (channel-based):
  *    ledcSetup(channel, freq, resolution)
  *    ledcAttachPin(pin, channel)
  *    ledcWrite(channel, duty)
+ *
+ *  LEDC channel assignments:
+ *    Channel 0 → Bottom Peltier RPWM
+ *    Channel 1 → Middle Peltier RPWM
+ *    Channel 2 → Top    Peltier RPWM
  * ============================================================
  */
 
@@ -22,11 +21,15 @@
 
 PeltierControl::PeltierControl() {
     // Initialize stage pin configurations
+    // Note: MIDDLE_LEN (GPIO11) and TOP_LPWM (GPIO13) are hardwired:
+    //   MIDDLE_LEN → 3.3V (always HIGH)  — GPIO11 freed for TFT MOSI
+    //   TOP_LPWM   → GND  (always LOW)   — GPIO13 freed for TFT SCK
+    // These freed pins are replaced with 255 (unused sentinel).
     _stages[STAGE_BOTTOM] = { BOTTOM_RPWM_PIN, BOTTOM_LPWM_PIN,
                               BOTTOM_REN_PIN,  BOTTOM_LEN_PIN };
     _stages[STAGE_MIDDLE] = { MIDDLE_RPWM_PIN, MIDDLE_LPWM_PIN,
-                              MIDDLE_REN_PIN,  MIDDLE_LEN_PIN };
-    _stages[STAGE_TOP]    = { TOP_RPWM_PIN,    TOP_LPWM_PIN,
+                              MIDDLE_REN_PIN,  255 };           // LEN hardwired 3.3V
+    _stages[STAGE_TOP]    = { TOP_RPWM_PIN,    255,             // LPWM hardwired GND
                               TOP_REN_PIN,     TOP_LEN_PIN };
 
     // Default power ratios from Config.h
@@ -48,25 +51,31 @@ PeltierControl::PeltierControl() {
 void PeltierControl::begin() {
     for (int i = 0; i < STAGE_COUNT; i++) {
         // Configure enable pins as outputs, drive HIGH
+        // (lenPin == 255 means it is hardwired to 3.3V externally)
         pinMode(_stages[i].renPin, OUTPUT);
-        pinMode(_stages[i].lenPin, OUTPUT);
         digitalWrite(_stages[i].renPin, HIGH);
-        digitalWrite(_stages[i].lenPin, HIGH);
+        if (_stages[i].lenPin != 255) {
+            pinMode(_stages[i].lenPin, OUTPUT);
+            digitalWrite(_stages[i].lenPin, HIGH);
+        }
 
         // LPWM held LOW (unidirectional cooling only)
         // NEVER reverse Peltier polarity during operation.
-        pinMode(_stages[i].lpwmPin, OUTPUT);
-        digitalWrite(_stages[i].lpwmPin, LOW);
-
-        // Configure RPWM as LEDC PWM output
-        // Arduino-ESP32 Core 3.x: ledcAttach(pin, freq, resolution)
-        if (!ledcAttach(_stages[i].rpwmPin, PWM_FREQUENCY, PWM_RESOLUTION)) {
-            Serial.printf("[PELTIER] ERROR: Failed to attach LEDC on GPIO %d\n",
-                          _stages[i].rpwmPin);
+        // (lpwmPin == 255 means it is hardwired to GND externally)
+        if (_stages[i].lpwmPin != 255) {
+            pinMode(_stages[i].lpwmPin, OUTPUT);
+            digitalWrite(_stages[i].lpwmPin, LOW);
         }
 
+        // Configure RPWM as LEDC PWM output
+        // Arduino-ESP32 Core 2.x: channel-based API
+        // Channel assignment: Bottom=0, Middle=1, Top=2
+        uint8_t channel = (uint8_t)i;
+        ledcSetup(channel, PWM_FREQUENCY, PWM_RESOLUTION);
+        ledcAttachPin(_stages[i].rpwmPin, channel);
+
         // Start with zero output
-        ledcWrite(_stages[i].rpwmPin, 0);
+        ledcWrite(channel, 0);
     }
 
     Serial.println("[PELTIER] BTS7960 outputs initialized (all OFF)");
@@ -118,7 +127,7 @@ void PeltierControl::setCascadePower(float masterPercent, SystemStatus& status) 
 
 void PeltierControl::allPeltiersOff() {
     for (int i = 0; i < STAGE_COUNT; i++) {
-        ledcWrite(_stages[i].rpwmPin, 0);
+        ledcWrite((uint8_t)i, 0);  // channel == stage index
         _currentPWM[i] = 0.0f;
     }
 }
@@ -154,5 +163,5 @@ void PeltierControl::applyPWM(PeltierStage stage, float percent) {
     _currentPWM[stage] = percent;
 
     uint32_t duty = PCT_TO_DUTY(percent);
-    ledcWrite(_stages[stage].rpwmPin, duty);
+    ledcWrite((uint8_t)stage, duty);  // channel == stage index
 }

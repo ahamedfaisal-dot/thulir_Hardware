@@ -4,15 +4,15 @@
  *  DisplayManager.cpp
  * ============================================================
  *  Industrial HMI for ILI9341 320×240 TFT (landscape).
- *  Uses HSPI (SPI3) peripheral on ESP32-S3.
+ *  Uses TFT_eSPI library (Bodmer). Pins configured via User_Setup.h
+ *  in the TFT_eSPI library folder.
  * ============================================================
  */
 
 #include "DisplayManager.h"
 
 DisplayManager::DisplayManager()
-    : _spi(nullptr)
-    , _tft(nullptr)
+    : _tft(nullptr)
     , _currentScreen(SCREEN_HOME)
     , _messageExpiry(0)
     , _lastActualTemp(-999.0f)
@@ -32,30 +32,23 @@ DisplayManager::DisplayManager()
 
 DisplayManager::~DisplayManager() {
     if (_tft) delete _tft;
-    if (_spi) delete _spi;
 }
 
 bool DisplayManager::begin() {
-    // Create SPI instance on HSPI (SPI3)
-    _spi = new SPIClass(HSPI);
-    _spi->begin(TFT_SCK_PIN, TFT_MISO_PIN, TFT_MOSI_PIN, TFT_CS_PIN);
-
-    // Create display instance
-    _tft = new Adafruit_ILI9341(_spi, TFT_DC_PIN, TFT_CS_PIN, TFT_RST_PIN);
-
-    _tft->begin();
+    // TFT_eSPI manages SPI internally — pins come from User_Setup.h
+    // (C:\Users\faisa\Documents\Arduino\libraries\TFT_eSPI\User_Setup.h)
+    _tft = new TFT_eSPI();
+    _tft->init();
+    delay(150);   // ILI9341 stabilization after hardware reset
     _tft->setRotation(3);  // Landscape, 320×240, USB connector on left
     _tft->fillScreen(COLOR_BG);
 
-    // Quick test pattern
-    _tft->setTextColor(COLOR_TEXT_PRIMARY);
-    _tft->setTextSize(2);
+    // Splash screen
     drawCenteredText(100, "TULIR", COLOR_TEXT_PRIMARY, 3);
     drawCenteredText(140, "Initializing...", COLOR_TEXT_SECONDARY, 1);
 
-    Serial.println("[DISPLAY] ILI9341 TFT initialized (320x240 landscape)");
-    Serial.printf("[DISPLAY] SPI pins: SCK=%d MOSI=%d MISO=%d CS=%d DC=%d RST=%d\n",
-                  TFT_SCK_PIN, TFT_MOSI_PIN, TFT_MISO_PIN,
+    Serial.println("[DISPLAY] ILI9341 via TFT_eSPI initialized (320x240 landscape)");
+    Serial.printf("[DISPLAY] MOSI=11 SCK=13 MISO=NC CS=%d DC=%d RST=%d\n",
                   TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 
     return true;
@@ -1145,7 +1138,7 @@ void DisplayManager::clearValueArea(int x, int y, int w, int h) {
     _tft->fillRect(x, y, w, h, COLOR_BG);
 }
 
-Adafruit_ILI9341* DisplayManager::getTFT() {
+TFT_eSPI* DisplayManager::getTFT() {
     return _tft;
 }
 

@@ -60,50 +60,50 @@ Production-quality firmware for ESP32-S3 driving three cascaded Peltier modules 
 
 ### Low-Current Logic Connections (3.3V / Signal Level)
 
-| Component                     | Component Pin | ESP32-S3 GPIO   | Notes                            |
-| ----------------------------- | ------------- | --------------- | -------------------------------- |
-| **BTS7960 #1 (Bottom)** | RPWM          | GPIO 4          | PWM signal                       |
-|                               | LPWM          | GPIO 5          | Held LOW                         |
-|                               | R_EN          | GPIO 6          | Held HIGH                        |
-|                               | L_EN          | GPIO 7          | Held HIGH                        |
-|                               | VCC           | 3.3V            | Logic supply                     |
-|                               | GND           | GND             | Common ground                    |
-| **BTS7960 #2 (Middle)** | RPWM          | GPIO 8          | PWM signal                       |
-|                               | LPWM          | GPIO 9          | Held LOW                         |
-|                               | R_EN          | GPIO 10         | Held HIGH                        |
-|                               | L_EN          | GPIO 11         | Held HIGH                        |
-|                               | VCC           | 3.3V            | Logic supply                     |
-|                               | GND           | GND             | Common ground                    |
-| **BTS7960 #3 (Top)**    | RPWM          | GPIO 12         | PWM signal                       |
-|                               | LPWM          | GPIO 13         | Held LOW                         |
-|                               | R_EN          | GPIO 14         | Held HIGH                        |
-|                               | L_EN          | GPIO 15         | Held HIGH                        |
-|                               | VCC           | 3.3V            | Logic supply                     |
-|                               | GND           | GND             | Common ground                    |
-| **DS18B20 (Cold side)** | DATA          | GPIO 3          | 4.7kΩ pull-up to 3.3V           |
-|                               | VCC           | 3.3V            |                                  |
-|                               | GND           | GND             |                                  |
-| **TFT ILI9341**         | SCK           | GPIO 36         | SPI clock                        |
-|                               | MOSI          | GPIO 35         | SPI data out                     |
-|                               | MISO          | GPIO 37         | SPI data in                      |
-|                               | CS            | GPIO 34         | Chip select                      |
-|                               | DC            | GPIO 33         | Data/Command                     |
-|                               | RST           | GPIO 21         | Reset                            |
-|                               | VCC           | 3.3V            |                                  |
-|                               | GND           | GND             |                                  |
-|                               | LED           | 3.3V            | Backlight (always on)            |
-| **4×4 Keypad**         | ROW0          | GPIO 16         |                                  |
-|                               | ROW1          | GPIO 17         |                                  |
-|                               | ROW2          | GPIO 18         |                                  |
-|                               | ROW3          | GPIO 38         | (Moved from 19 — USB)           |
-|                               | COL0          | GPIO 20         |                                  |
-|                               | COL1          | GPIO 39         |                                  |
-|                               | COL2          | GPIO 40         |                                  |
-|                               | COL3          | GPIO 41         |                                  |
-| **DFPlayer Mini**       | RX            | GPIO 1 (ESP TX) | 1kΩ series resistor recommended |
-|                               | TX            | GPIO 2 (ESP RX) |                                  |
-|                               | VCC           | 5V              |                                  |
-|                               | GND           | GND             |                                  |
+| Component                     | Component Pin | ESP32-S3 GPIO   | Notes                                                  |
+| ----------------------------- | ------------- | --------------- | ------------------------------------------------------ |
+| **BTS7960 #1 (Bottom)** | RPWM          | GPIO 4          | PWM signal                                             |
+|                               | LPWM          | **GND** (hardwired) | Always LOW — wire directly to GND, not GPIO        |
+|                               | R_EN          | GPIO 6          | Held HIGH                                              |
+|                               | L_EN          | GPIO 7          | Held HIGH                                              |
+|                               | VCC           | 3.3V            | Logic supply                                           |
+|                               | GND           | GND             | Common ground                                          |
+| **BTS7960 #2 (Middle)** | RPWM          | GPIO 8          | PWM signal                                             |
+|                               | LPWM          | GPIO 9          | Held LOW                                               |
+|                               | R_EN          | GPIO 10         | Held HIGH                                              |
+|                               | L_EN          | **3.3V** (hardwired) | Always HIGH — wire directly to 3.3V; GPIO11 freed |
+|                               | VCC           | 3.3V            | Logic supply                                           |
+|                               | GND           | GND             | Common ground                                          |
+| **BTS7960 #3 (Top)**    | RPWM          | GPIO 12         | PWM signal                                             |
+|                               | LPWM          | **GND** (hardwired) | Always LOW — wire directly to GND; GPIO13 freed    |
+|                               | R_EN          | GPIO 14         | Held HIGH                                              |
+|                               | L_EN          | GPIO 15         | Held HIGH                                              |
+|                               | VCC           | 3.3V            | Logic supply                                           |
+|                               | GND           | GND             | Common ground                                          |
+| **DS18B20 (Cold side)** | DATA          | GPIO 3          | 4.7kΩ pull-up to 3.3V                                 |
+|                               | VCC           | 3.3V            |                                                        |
+|                               | GND           | GND             |                                                        |
+| **TFT ILI9341**         | SCK           | **GPIO 13**     | Native FSPI CLK — TFT_eSPI library                    |
+|                               | MOSI          | **GPIO 11**     | Native FSPI MOSI — TFT_eSPI library                   |
+|                               | MISO          | **Not connected** | Display is write-only                                |
+|                               | CS            | **GPIO 47**     | Chip select                                            |
+|                               | DC            | **GPIO 48**     | Data/Command                                           |
+|                               | RST           | GPIO 21         | Reset                                                  |
+|                               | VCC           | 3.3V or 5V      | Check your module — some need 5V                      |
+|                               | GND           | GND             |                                                        |
+|                               | LED           | 3.3V            | Backlight (always on)                                  |
+| **4×4 Keypad**         | ROW0          | GPIO 16         |                                                        |
+|                               | ROW1          | GPIO 17         |                                                        |
+|                               | ROW2          | GPIO 18         |                                                        |
+|                               | ROW3          | GPIO 38         | (Moved from 19 — USB)                                 |
+|                               | COL0          | GPIO 20         |                                                        |
+|                               | COL1          | GPIO 39         |                                                        |
+|                               | COL2          | GPIO 40         |                                                        |
+|                               | COL3          | GPIO 41         |                                                        |
+| **DFPlayer Mini**       | RX            | GPIO 1 (ESP TX) | 1kΩ series resistor recommended                       |
+|                               | TX            | GPIO 2 (ESP RX) |                                                        |
+|                               | VCC           | 5V              |                                                        |
+|                               | GND           | GND             |                                                        |
 
 ### High-Current Power Connections (12V)
 
@@ -156,26 +156,34 @@ See `Config.h` for the authoritative, editable pin definitions.
 **ESP32-S3 Pins to Avoid:**
 
 - GPIO 0: Boot strapping pin
-- GPIO 19, 20: USB D−/D+ on DevKitC-1 (used if USB-OTG is active)
-- GPIO 26–32: Do not exist on ESP32-S3 (internal flash/PSRAM)
+- GPIO 19: USB D− on DevKitC-1
+- GPIO 26–32: Do not exist on ESP32-S3 (internal flash)
+- GPIO 33–37: **Reserved for Octal PSRAM** on ESP32-S3-WROOM-1 R8 modules — do not use for external signals
 - GPIO 43, 44: Default UART0 TX/RX (used by Serial Monitor)
+
+**Why GPIO 11 and 13 are safe for TFT SPI:**
+BTS7960 `MIDDLE L_EN` (always HIGH) and `TOP LPWM` (always LOW) are hardwired directly to 3.3V and GND respectively, freeing GPIO 11 and GPIO 13 for native FSPI use.
 
 ---
 
 ## Required Libraries
 
-Install via Arduino Library Manager or PlatformIO:
+Install via Arduino Library Manager:
 
-| Library              | Author          | Version | Purpose             |
-| -------------------- | --------------- | ------- | ------------------- |
-| Adafruit GFX Library | Adafruit        | ≥1.11  | Graphics primitives |
-| Adafruit ILI9341     | Adafruit        | ≥1.6   | TFT display driver  |
-| OneWire              | Paul Stoffregen | ≥2.3   | 1-Wire protocol     |
-| DallasTemperature    | Miles Burton    | ≥3.9   | DS18B20 driver      |
-| Keypad               | Mark Stanley    | ≥3.1   | Matrix keypad       |
-| DFRobotDFPlayerMini  | DFRobot         | ≥1.0.5 | Audio player        |
+| Library              | Author          | Version  | Purpose                        |
+| -------------------- | --------------- | -------- | ------------------------------ |
+| **TFT_eSPI**         | Bodmer          | ≥2.5    | TFT display driver + SPI mgmt  |
+| OneWire              | Paul Stoffregen | ≥2.3    | 1-Wire protocol                |
+| DallasTemperature    | Miles Burton    | ≥3.9    | DS18B20 driver                 |
+| Keypad               | Mark Stanley    | ≥3.1    | Matrix keypad                  |
+| DFRobotDFPlayerMini  | DFRobot         | ≥1.0.5  | Audio player                   |
 
-**Board:** ESP32-S3 Dev Module (Arduino-ESP32 Core ≥3.0)
+> ⚠ **After installing TFT_eSPI**, you must copy `User_Setup.h` from this
+> sketch folder into the library:
+> `C:\Users\<YOU>\Documents\Arduino\libraries\TFT_eSPI\User_Setup.h`
+> (Overwrite the existing file. This sets the correct SPI pins.)
+
+**Board:** ESP32S3 Dev Module (Arduino-ESP32 Core **2.x**)
 
 **Arduino IDE Board Settings:**
 
@@ -183,6 +191,7 @@ Install via Arduino Library Manager or PlatformIO:
 - USB Mode: "Hardware CDC and JTAG" (for Serial Monitor)
 - Flash Size: 8MB (or as per your module)
 - Partition Scheme: "Default 4MB with spiffs"
+- PSRAM: "OPI PSRAM" if your module has R8 suffix, otherwise "Disabled"
 
 ---
 
@@ -192,6 +201,7 @@ Install via Arduino Library Manager or PlatformIO:
 thulir_final/
 ├── thulir_final.ino      — Main sketch: setup(), loop(), state machine
 ├── Config.h              — All GPIO pins, constants, defaults, tunables
+├── User_Setup.h          — TFT_eSPI pin config (copy to TFT_eSPI library folder!)
 ├── PIDController.h       — PID controller class declaration
 ├── PIDController.cpp     — PID algorithm (anti-windup, derivative-on-measurement)
 ├── PeltierControl.h      — BTS7960 driver class declaration
@@ -203,7 +213,7 @@ thulir_final/
 ├── KeypadManager.h       — Keypad class declaration
 ├── KeypadManager.cpp     — Non-blocking scan, numeric input FSM
 ├── DisplayManager.h      — TFT display class declaration
-├── DisplayManager.cpp    — ILI9341 HMI screens, selective redraw
+├── DisplayManager.cpp    — ILI9341 HMI screens via TFT_eSPI, selective redraw
 ├── AudioManager.h        — Audio class declaration
 ├── AudioManager.cpp      — DFPlayer Mini non-blocking announcements
 ├── SafetyManager.h       — Safety class declaration
@@ -365,12 +375,15 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 
 ### Display Issues
 
-| Problem            | Possible Cause         | Solution                                      |
-| ------------------ | ---------------------- | --------------------------------------------- |
-| White/blank screen | Wrong SPI pins         | Check TFT_SCK/MOSI/MISO/CS/DC/RST in Config.h |
-| Garbled display    | Wrong rotation         | Change`setRotation()` in DisplayManager.cpp |
-| No backlight       | Backlight pin floating | Wire LED pin to 3.3V or VCC                   |
-| Flickering         | Full redraw too often  | Increase DISPLAY_UPDATE_INTERVAL              |
+| Problem            | Possible Cause                        | Solution                                                              |
+| ------------------ | ------------------------------------- | --------------------------------------------------------------------- |
+| White/blank screen | PSRAM pin conflict (GPIO 33–37)      | Do NOT use GPIO 33–37 for SPI on ESP32-S3-WROOM-1 R8 modules        |
+| White/blank screen | Wrong SPI pins                        | Verify User_Setup.h in TFT_eSPI library folder has correct pins      |
+| White/blank screen | User_Setup.h not copied to library   | Copy `User_Setup.h` from sketch folder to `libraries/TFT_eSPI/`     |
+| Garbled display    | Wrong rotation                        | Change `setRotation()` in DisplayManager.cpp                         |
+| Wrong colors       | RGB vs BGR byte order                 | Toggle `TFT_RGB_ORDER` between `TFT_RGB` and `TFT_BGR` in User_Setup.h |
+| No backlight       | Backlight pin floating                | Wire LED pin to 3.3V                                                  |
+| Flickering         | Full redraw too often                 | Increase DISPLAY_UPDATE_INTERVAL                                      |
 
 ### Temperature Sensor Issues
 
