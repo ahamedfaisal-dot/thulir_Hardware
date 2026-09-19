@@ -31,8 +31,16 @@ TemperatureManager::TemperatureManager()
 }
 
 bool TemperatureManager::begin() {
+    delay(100);  // Allow 1-Wire bus pull-up to stabilize on power-up
     _sensors.begin();
     _sensorCount = _sensors.getDeviceCount();
+
+    if (_sensorCount == 0) {
+        // Retry once after 150ms stabilization
+        delay(150);
+        _sensors.begin();
+        _sensorCount = _sensors.getDeviceCount();
+    }
 
     if (_sensorCount == 0) {
         Serial.println("[TEMP] ERROR: No DS18B20 sensor found on cold-side bus!");

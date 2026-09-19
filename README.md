@@ -58,52 +58,66 @@ Production-quality firmware for ESP32-S3 driving three cascaded Peltier modules 
 
 ## Wiring Tables
 
+> The table below is the **authoritative, verified-working** pinout as of the
+> final hardware bring-up (TFT confirmed working via `Adafruit_ILI9341`).
+> It matches `Config.h` exactly — if the two ever disagree, trust `Config.h`
+> and update this table.
+
 ### Low-Current Logic Connections (3.3V / Signal Level)
 
-| Component                     | Component Pin | ESP32-S3 GPIO   | Notes                                                  |
-| ----------------------------- | ------------- | --------------- | ------------------------------------------------------ |
-| **BTS7960 #1 (Bottom)** | RPWM          | GPIO 4          | PWM signal                                             |
-|                               | LPWM          | **GND** (hardwired) | Always LOW — wire directly to GND, not GPIO        |
-|                               | R_EN          | GPIO 6          | Held HIGH                                              |
-|                               | L_EN          | GPIO 7          | Held HIGH                                              |
-|                               | VCC           | 3.3V            | Logic supply                                           |
-|                               | GND           | GND             | Common ground                                          |
-| **BTS7960 #2 (Middle)** | RPWM          | GPIO 8          | PWM signal                                             |
-|                               | LPWM          | GPIO 9          | Held LOW                                               |
-|                               | R_EN          | GPIO 10         | Held HIGH                                              |
-|                               | L_EN          | **3.3V** (hardwired) | Always HIGH — wire directly to 3.3V; GPIO11 freed |
-|                               | VCC           | 3.3V            | Logic supply                                           |
-|                               | GND           | GND             | Common ground                                          |
-| **BTS7960 #3 (Top)**    | RPWM          | GPIO 12         | PWM signal                                             |
-|                               | LPWM          | **GND** (hardwired) | Always LOW — wire directly to GND; GPIO13 freed    |
-|                               | R_EN          | GPIO 14         | Held HIGH                                              |
-|                               | L_EN          | GPIO 15         | Held HIGH                                              |
-|                               | VCC           | 3.3V            | Logic supply                                           |
-|                               | GND           | GND             | Common ground                                          |
-| **DS18B20 (Cold side)** | DATA          | GPIO 3          | 4.7kΩ pull-up to 3.3V                                 |
-|                               | VCC           | 3.3V            |                                                        |
-|                               | GND           | GND             |                                                        |
-| **TFT ILI9341**         | SCK           | **GPIO 13**     | Native FSPI CLK — TFT_eSPI library                    |
-|                               | MOSI          | **GPIO 11**     | Native FSPI MOSI — TFT_eSPI library                   |
-|                               | MISO          | **Not connected** | Display is write-only                                |
-|                               | CS            | **GPIO 47**     | Chip select                                            |
-|                               | DC            | **GPIO 48**     | Data/Command                                           |
-|                               | RST           | GPIO 21         | Reset                                                  |
-|                               | VCC           | 3.3V or 5V      | Check your module — some need 5V                      |
-|                               | GND           | GND             |                                                        |
-|                               | LED           | 3.3V            | Backlight (always on)                                  |
-| **4×4 Keypad**         | ROW0          | GPIO 16         |                                                        |
-|                               | ROW1          | GPIO 17         |                                                        |
-|                               | ROW2          | GPIO 18         |                                                        |
-|                               | ROW3          | GPIO 38         | (Moved from 19 — USB)                                 |
-|                               | COL0          | GPIO 20         |                                                        |
-|                               | COL1          | GPIO 39         |                                                        |
-|                               | COL2          | GPIO 40         |                                                        |
-|                               | COL3          | GPIO 41         |                                                        |
-| **DFPlayer Mini**       | RX            | GPIO 1 (ESP TX) | 1kΩ series resistor recommended                       |
-|                               | TX            | GPIO 2 (ESP RX) |                                                        |
-|                               | VCC           | 5V              |                                                        |
-|                               | GND           | GND             |                                                        |
+| Component                | Component Pin | ESP32-S3 GPIO        | Notes                                                        |
+| ------------------------ | -------------- | --------------------- | ------------------------------------------------------------ |
+| **BTS7960 #1 (Bottom)**  | RPWM           | GPIO 4                | PWM signal                                                    |
+|                          | LPWM           | GPIO 5                | Held LOW in software (unidirectional cooling only)            |
+|                          | R_EN           | GPIO 6                | Held HIGH                                                     |
+|                          | L_EN           | GPIO 7                | Held HIGH                                                     |
+|                          | VCC            | 3.3V                  | Logic supply                                                  |
+|                          | GND            | GND                   | Common ground                                                 |
+| **BTS7960 #2 (Middle)**  | RPWM           | GPIO 8                | PWM signal                                                    |
+|                          | LPWM           | **GPIO 47**           | Held LOW in software (moved from GPIO9 to free TFT DC)        |
+|                          | R_EN           | **GPIO 48**           | Held HIGH (moved from GPIO10 to free TFT CS)                  |
+|                          | L_EN           | **3.3V** (hardwired)  | Always HIGH — wire directly to 3.3V; GPIO11 freed for TFT MOSI |
+|                          | VCC            | 3.3V                  | Logic supply                                                  |
+|                          | GND            | GND                   | Common ground                                                 |
+| **BTS7960 #3 (Top)**     | RPWM           | **GPIO 42**           | PWM signal (moved from GPIO12 to free native FSPI SCK)        |
+|                          | LPWM           | **GPIO 21**           | Held LOW in software (moved from GPIO13 to free TFT MISO)     |
+|                          | R_EN           | **GPIO 44**           | Held HIGH (moved from GPIO14 to free TFT RST)                 |
+|                          | L_EN           | GPIO 15               | Held HIGH                                                     |
+|                          | VCC            | 3.3V                  | Logic supply                                                  |
+|                          | GND            | GND                   | Common ground                                                 |
+| **DS18B20 (Cold side)**  | DATA           | GPIO 3                | 4.7kΩ pull-up to 3.3V                                         |
+|                          | VCC            | 3.3V                  |                                                                |
+|                          | GND            | GND                   |                                                                |
+| **DS18B20 (Hot side, optional)** | DATA   | GPIO 43               | Not installed by default — set `HOT_SIDE_SENSOR_ENABLED true` in Config.h to use |
+|                          | VCC            | 3.3V                  |                                                                |
+|                          | GND            | GND                   |                                                                |
+| **TFT ILI9341**          | SCK            | **GPIO 12**           | Driven via `Adafruit_ILI9341` + explicit `SPIClass(FSPI)`     |
+|                          | MOSI (SDI)     | **GPIO 11**           |                                                                |
+|                          | MISO (SDO)     | **GPIO 13**           | Used for panel ID readback during bring-up diagnostics        |
+|                          | CS             | **GPIO 10**           | Chip select                                                   |
+|                          | DC             | **GPIO 9**            | Data/Command                                                  |
+|                          | RST            | **GPIO 14**           | Reset                                                         |
+|                          | VCC            | **5V**                | This module needs 5V — 3.3V leaves the onboard regulator without enough headroom to init |
+|                          | GND            | GND                   |                                                                |
+|                          | LED            | 3.3V                  | Backlight (always on)                                         |
+| **4×4 Keypad**           | ROW0           | GPIO 16               |                                                                |
+|                          | ROW1           | GPIO 17               |                                                                |
+|                          | ROW2           | GPIO 18               |                                                                |
+|                          | ROW3           | GPIO 38               | (Moved from 19 — USB)                                         |
+|                          | COL0           | GPIO 20               |                                                                |
+|                          | COL1           | GPIO 39               |                                                                |
+|                          | COL2           | GPIO 40               |                                                                |
+|                          | COL3           | GPIO 41               |                                                                |
+| **DFPlayer Mini**        | RX             | GPIO 1 (ESP TX)       | 1kΩ series resistor recommended                               |
+|                          | TX             | GPIO 2 (ESP RX)       |                                                                |
+|                          | VCC            | 5V                    |                                                                |
+|                          | GND            | GND                   |                                                                |
+
+> **GPIO 47/48/21 were tried first for TFT CS/DC/RST** (to dodge the Peltier
+> pin conflicts) but the panel never responded on those pins on this board
+> (confirmed by a register-ID read returning `0x00 0x00 0x00`). They were
+> swapped back to the proven-working 10/9/14, and the Peltier pins that used
+> to live there were relocated to 47/48/21/44 instead — see the notes above.
 
 ### High-Current Power Connections (12V)
 
@@ -159,10 +173,25 @@ See `Config.h` for the authoritative, editable pin definitions.
 - GPIO 19: USB D− on DevKitC-1
 - GPIO 26–32: Do not exist on ESP32-S3 (internal flash)
 - GPIO 33–37: **Reserved for Octal PSRAM** on ESP32-S3-WROOM-1 R8 modules — do not use for external signals
-- GPIO 43, 44: Default UART0 TX/RX (used by Serial Monitor)
+- GPIO 43, 44: Default UART0 TX/RX — only reserved if your board setting uses
+  UART0 for Serial. With **USB Mode: "Hardware CDC and JTAG"** (as specified
+  below), `Serial` runs over native USB instead, so these pins are free —
+  this firmware uses GPIO 43 (hot-side sensor, optional) and GPIO 44
+  (BTS7960 #3 R_EN) safely under that board setting.
 
-**Why GPIO 11 and 13 are safe for TFT SPI:**
-BTS7960 `MIDDLE L_EN` (always HIGH) and `TOP LPWM` (always LOW) are hardwired directly to 3.3V and GND respectively, freeing GPIO 11 and GPIO 13 for native FSPI use.
+**Why the TFT uses GPIO 9/10/11/12/13/14:**
+- These are the pins proven to actually work with this ILI9341 panel on this
+  ESP32-S3 board (verified across two independent working projects, `igem`
+  and `sih2026_input`, and by a register-ID readback test in this project).
+- **GPIO 11 (MOSI)**: BTS7960 #2 `MIDDLE L_EN` (always HIGH) is hardwired
+  directly to 3.3V, freeing GPIO 11.
+- **GPIO 12 (SCK)**: BTS7960 #3 `TOP RPWM` was moved to GPIO 42, freeing GPIO 12.
+- **GPIO 9 (DC), GPIO 10 (CS), GPIO 13 (MISO), GPIO 14 (RST)**: freed by
+  relocating BTS7960 #2 `LPWM`/`R_EN` to GPIO 47/48 and BTS7960 #3
+  `LPWM`/`R_EN` to GPIO 21/44.
+- GPIO 47/48/21 do **not** work reliably as TFT SPI control lines on this
+  specific board — they were tried first and gave a permanently unresponsive
+  panel, so they were freed back up for Peltier use instead.
 
 ---
 
@@ -172,16 +201,21 @@ Install via Arduino Library Manager:
 
 | Library              | Author          | Version  | Purpose                        |
 | -------------------- | --------------- | -------- | ------------------------------ |
-| **TFT_eSPI**         | Bodmer          | ≥2.5    | TFT display driver + SPI mgmt  |
+| **Adafruit_ILI9341** | Adafruit        | ≥1.5    | TFT display driver             |
+| **Adafruit_GFX_Library** | Adafruit    | ≥1.11   | Graphics primitives (required by Adafruit_ILI9341) |
 | OneWire              | Paul Stoffregen | ≥2.3    | 1-Wire protocol                |
 | DallasTemperature    | Miles Burton    | ≥3.9    | DS18B20 driver                 |
 | Keypad               | Mark Stanley    | ≥3.1    | Matrix keypad                  |
 | DFRobotDFPlayerMini  | DFRobot         | ≥1.0.5  | Audio player                   |
 
-> ⚠ **After installing TFT_eSPI**, you must copy `User_Setup.h` from this
-> sketch folder into the library:
-> `C:\Users\<YOU>\Documents\Arduino\libraries\TFT_eSPI\User_Setup.h`
-> (Overwrite the existing file. This sets the correct SPI pins.)
+> ⚠ **Do not use TFT_eSPI for the display.** It was tried first (it's a
+> capable, widely-used library) but on this specific ESP32-S3 board this
+> ILI9341 panel never responded to it — confirmed by a register-ID read
+> returning `0x00 0x00 0x00` on every attempt, even with correct pins,
+> power, and ground. `Adafruit_ILI9341` works perfectly on the exact same
+> wiring, so `DisplayManager` uses that instead. No `User_Setup.h` /
+> library-folder config file is needed — pins are passed directly in
+> `DisplayManager::begin()` (see `Config.h`).
 
 **Board:** ESP32S3 Dev Module (Arduino-ESP32 Core **2.x**)
 
@@ -200,8 +234,9 @@ Install via Arduino Library Manager:
 ```
 thulir_final/
 ├── thulir_final.ino      — Main sketch: setup(), loop(), state machine
+│                           (also holds TEST_MODE, a build-time switch for
+│                           the Adafruit_ILI9341 display-only bring-up test)
 ├── Config.h              — All GPIO pins, constants, defaults, tunables
-├── User_Setup.h          — TFT_eSPI pin config (copy to TFT_eSPI library folder!)
 ├── PIDController.h       — PID controller class declaration
 ├── PIDController.cpp     — PID algorithm (anti-windup, derivative-on-measurement)
 ├── PeltierControl.h      — BTS7960 driver class declaration
@@ -213,7 +248,7 @@ thulir_final/
 ├── KeypadManager.h       — Keypad class declaration
 ├── KeypadManager.cpp     — Non-blocking scan, numeric input FSM
 ├── DisplayManager.h      — TFT display class declaration
-├── DisplayManager.cpp    — ILI9341 HMI screens via TFT_eSPI, selective redraw
+├── DisplayManager.cpp    — ILI9341 HMI screens via Adafruit_ILI9341, selective redraw
 ├── AudioManager.h        — Audio class declaration
 ├── AudioManager.cpp      — DFPlayer Mini non-blocking announcements
 ├── SafetyManager.h       — Safety class declaration
@@ -375,15 +410,23 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 
 ### Display Issues
 
-| Problem            | Possible Cause                        | Solution                                                              |
-| ------------------ | ------------------------------------- | --------------------------------------------------------------------- |
-| White/blank screen | PSRAM pin conflict (GPIO 33–37)      | Do NOT use GPIO 33–37 for SPI on ESP32-S3-WROOM-1 R8 modules        |
-| White/blank screen | Wrong SPI pins                        | Verify User_Setup.h in TFT_eSPI library folder has correct pins      |
-| White/blank screen | User_Setup.h not copied to library   | Copy `User_Setup.h` from sketch folder to `libraries/TFT_eSPI/`     |
-| Garbled display    | Wrong rotation                        | Change `setRotation()` in DisplayManager.cpp                         |
-| Wrong colors       | RGB vs BGR byte order                 | Toggle `TFT_RGB_ORDER` between `TFT_RGB` and `TFT_BGR` in User_Setup.h |
-| No backlight       | Backlight pin floating                | Wire LED pin to 3.3V                                                  |
-| Flickering         | Full redraw too often                 | Increase DISPLAY_UPDATE_INTERVAL                                      |
+| Problem              | Possible Cause                              | Solution                                                                 |
+| --------------------- | -------------------------------------------- | ------------------------------------------------------------------------- |
+| No backlight at all   | Display VCC/LED not powered                  | Confirm VCC is on **5V** and LED is on 3.3V — a floating/unpowered rail gives a totally dark panel |
+| Backlight on, screen white | Panel powered but not initializing            | Verify wiring against the table above; run the `TEST_MODE 2` bring-up test in `thulir_final.ino` and check `[TEST] Display ID bytes` in Serial — `0x00 0x00 0x00` means the panel isn't responding at all |
+| Backlight on, screen black (static, never changes) | Same as above — panel at its power-up default, not receiving commands | Same as above |
+| PSRAM pin conflict    | Using GPIO 33–37 for other signals           | Do NOT use GPIO 33–37 for anything on ESP32-S3-WROOM-1 R8 (Octal PSRAM) modules |
+| Garbled display       | Wrong rotation                               | Change `setRotation()` in `DisplayManager::begin()`                      |
+| Wrong colors          | RGB vs BGR byte order                        | Adafruit_ILI9341 defaults to RGB; check the panel datasheet if colors look swapped |
+| Flickering            | Full redraw too often                        | Increase `DISPLAY_UPDATE_INTERVAL` in Config.h                           |
+
+> This project moved from `TFT_eSPI` to `Adafruit_ILI9341` after `TFT_eSPI`
+> never got a response from this specific panel on this specific ESP32-S3
+> board (confirmed by reading the panel's ID register and getting all
+> zeros, across many verified-correct wiring/power/pin configurations).
+> If a display "should" work per every check above but still doesn't,
+> trying the other driver library is a legitimate next step — see
+> `TEST_MODE 2` in `thulir_final.ino` for a ready-made isolated test.
 
 ### Temperature Sensor Issues
 

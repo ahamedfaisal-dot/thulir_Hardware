@@ -4,8 +4,8 @@
  *  DisplayManager.cpp
  * ============================================================
  *  Industrial HMI for ILI9341 320×240 TFT (landscape).
- *  Uses TFT_eSPI library (Bodmer). Pins configured via User_Setup.h
- *  in the TFT_eSPI library folder.
+ *  Uses Adafruit_ILI9341 + Adafruit_GFX. Pins are passed directly in
+ *  begin() (see Config.h) — no separate library config file needed.
  * ============================================================
  */
 
@@ -31,25 +31,35 @@ DisplayManager::DisplayManager()
 }
 
 DisplayManager::~DisplayManager() {
-    if (_tft) delete _tft;
+    // _tft points to a static instance — do NOT delete it.
+    _tft = nullptr;
 }
 
 bool DisplayManager::begin() {
-    // TFT_eSPI manages SPI internally — pins come from User_Setup.h
-    // (C:\Users\faisa\Documents\Arduino\libraries\TFT_eSPI\User_Setup.h)
-    _tft = new TFT_eSPI();
-    _tft->init();
+    // Adafruit_ILI9341 + the SPIClass it drives MUST be static/global —
+    // never heap-allocated — for the same reason TFT_eSPI required it:
+    // the underlying SPI peripheral state must persist for the life of
+    // the program. A function-local static is constructed once on first
+    // call and persists thereafter (same as a global).
+    static SPIClass tftSPI(FSPI);
+    static Adafruit_ILI9341 tftInstance(&tftSPI, TFT_DC_PIN, TFT_CS_PIN, TFT_RST_PIN);
+    _tft = &tftInstance;
+
+    tftSPI.begin(TFT_SCK_PIN, TFT_MISO_PIN, TFT_MOSI_PIN, TFT_CS_PIN);
+    _tft->begin();
     delay(150);   // ILI9341 stabilization after hardware reset
     _tft->setRotation(3);  // Landscape, 320×240, USB connector on left
     _tft->fillScreen(COLOR_BG);
 
     // Splash screen
-    drawCenteredText(100, "TULIR", COLOR_TEXT_PRIMARY, 3);
-    drawCenteredText(140, "Initializing...", COLOR_TEXT_SECONDARY, 1);
+    drawCenteredText(95, "TULIR", COLOR_TEXT_PRIMARY, 3);
+    drawCenteredText(135, "3-Stage Peltier Controller", COLOR_TEMP_ACTUAL, 1);
+    drawCenteredText(160, "Initializing...", COLOR_TEXT_SECONDARY, 1);
+    delay(1200);  // Hold splash screen so user sees boot progress
 
-    Serial.println("[DISPLAY] ILI9341 via TFT_eSPI initialized (320x240 landscape)");
-    Serial.printf("[DISPLAY] MOSI=11 SCK=13 MISO=NC CS=%d DC=%d RST=%d\n",
-                  TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
+    Serial.println("[DISPLAY] ILI9341 via Adafruit_ILI9341 initialized (320x240 landscape)");
+    Serial.printf("[DISPLAY] MOSI=%d SCK=%d MISO=%d CS=%d DC=%d RST=%d\n",
+                  TFT_MOSI_PIN, TFT_SCK_PIN, TFT_MISO_PIN, TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 
     return true;
 }
@@ -126,28 +136,25 @@ void DisplayManager::drawHomeScreen(const SystemStatus& status) {
     // Status text in header
     const char* stName = getStateName(status.state);
     _tft->setTextSize(1);
-    _tft->setTextColor(COLOR_TEXT_SECONDARY, COLOR_HEADER_BG);
-    _tft->setCursor(320 - strlen(stName) * 6 - 4, 7);
+    _tft->setTextColor(COLOR_TEXT_PRIMARY, COLOR_HEADER_BG);
+    _tft->setCursor(320 - strlen(stName) * 6 - 8, 6);
     _tft->print(stName);
 
     drawDivider(22);
 
     // --- Temperature labels ---
     _tft->setTextSize(1);
-    _tft->setTextColor(COLOR_TEXT_SECONDARY);
+    _tft->setTextColor(COLOR_TEXT_SECONDARY, COLOR_BG);
     _tft->setCursor(10, 26);
-    _tft->print("ACTUAL");
+    _tft->print("ACTUAL TEMP");
     _tft->setCursor(180, 26);
-    _tft->print("TARGET");
-
-    // --- Temperature values (large) ---
-    // (Will be drawn by updateHomeScreen for selective redraw)
+    _tft->print("TARGET TEMP");
 
     drawDivider(58);
 
     // --- Step and Status labels ---
     _tft->setTextSize(1);
-    _tft->setTextColor(COLOR_TEXT_SECONDARY);
+    _tft->setTextColor(COLOR_TEXT_SECONDARY, COLOR_BG);
     _tft->setCursor(10, 63);
     _tft->print("STEP");
     _tft->setCursor(130, 63);
@@ -157,21 +164,21 @@ void DisplayManager::drawHomeScreen(const SystemStatus& status) {
 
     // --- PWM bar labels ---
     _tft->setTextSize(1);
-    _tft->setTextColor(COLOR_TEXT_SECONDARY);
+    _tft->setTextColor(COLOR_TEXT_SECONDARY, COLOR_BG);
     _tft->setCursor(4, 86);  _tft->print("BOT");
     _tft->setCursor(4, 102); _tft->print("MID");
     _tft->setCursor(4, 118); _tft->print("TOP");
 
     // PWM bar backgrounds
-    drawBar(30, 84, 210, 12, 0, COLOR_BAR_BG);
-    drawBar(30, 100, 210, 12, 0, COLOR_BAR_BG);
-    drawBar(30, 116, 210, 12, 0, COLOR_BAR_BG);
+    drawBar(30, 84, 210, 12, status.bottomPWM, COLOR_BAR_FILL);
+    drawBar(30, 100, 210, 12, status.middlePWM, COLOR_BAR_FILL);
+    drawBar(30, 116, 210, 12, status.topPWM, COLOR_BAR_FILL);
 
     drawDivider(132);
 
     // --- PID/Setpoint label ---
     _tft->setTextSize(1);
-    _tft->setTextColor(COLOR_TEXT_SECONDARY);
+    _tft->setTextColor(COLOR_TEXT_SECONDARY, COLOR_BG);
     _tft->setCursor(10, 138);
     _tft->print("PID");
     _tft->setCursor(130, 138);
@@ -181,7 +188,7 @@ void DisplayManager::drawHomeScreen(const SystemStatus& status) {
 
     // --- Timer labels ---
     _tft->setTextSize(1);
-    _tft->setTextColor(COLOR_TEXT_SECONDARY);
+    _tft->setTextColor(COLOR_TEXT_SECONDARY, COLOR_BG);
     _tft->setCursor(10, 160);
     _tft->print("ELAPSED");
     _tft->setCursor(170, 160);
@@ -189,7 +196,7 @@ void DisplayManager::drawHomeScreen(const SystemStatus& status) {
 
     // Ramp info area (used in Step 5)
     _tft->setCursor(10, 195);
-    _tft->setTextColor(COLOR_TEXT_DIM);
+    _tft->setTextColor(COLOR_TEXT_DIM, COLOR_BG);
     if (status.state == STATE_STEP5_RAMP) {
         _tft->print("RAMP: -1.0 C/min");
     }
@@ -198,11 +205,24 @@ void DisplayManager::drawHomeScreen(const SystemStatus& status) {
 
     // --- Footer ---
     _tft->setTextSize(1);
-    _tft->setTextColor(COLOR_TEXT_DIM);
-    _tft->setCursor(10, 225);
-    _tft->print("D=MENU");
-    _tft->setCursor(240, 225);
-    _tft->print("C=STOP");
+    _tft->setTextColor(COLOR_TEXT_SECONDARY, COLOR_BG);
+    _tft->setCursor(10, 222);
+    _tft->print("[D] MENU");
+    _tft->setCursor(240, 222);
+    _tft->print("[C] STOP");
+
+    // Prime cache so updateHomeScreen draws everything on first pass
+    _lastActualTemp = -999.0f;
+    _lastTargetTemp = -999.0f;
+    _lastSetpoint = -999.0f;
+    _lastPidOutput = -1.0f;
+    _lastBottomPWM = -1.0f;
+    _lastMiddlePWM = -1.0f;
+    _lastTopPWM = -1.0f;
+    _lastStep = 255;
+    _lastState = (SystemState)255;
+    _lastHoldElapsed = 0xFFFFFFFF;
+    _lastHoldDuration = 0xFFFFFFFF;
 
     // Now update the dynamic values
     updateHomeScreen(status);
@@ -211,6 +231,24 @@ void DisplayManager::drawHomeScreen(const SystemStatus& status) {
 void DisplayManager::updateHomeScreen(const SystemStatus& status) {
     if (!_tft) return;
     char buf[16];
+
+    // Auto-clear temporary popup message after timeout
+    if (_messageExpiry > 0 && millis() > _messageExpiry) {
+        _messageExpiry = 0;
+        _tft->fillRect(15, 95, 290, 50, COLOR_BG);
+        _lastBottomPWM = -1.0f;
+        _lastMiddlePWM = -1.0f;
+        _lastTopPWM = -1.0f;
+        _lastPidOutput = -1.0f;
+        _lastSetpoint = -999.0f;
+        _tft->setTextSize(1);
+        _tft->setTextColor(COLOR_TEXT_SECONDARY, COLOR_BG);
+        _tft->setCursor(4, 102); _tft->print("MID");
+        _tft->setCursor(4, 118); _tft->print("TOP");
+        _tft->setCursor(10, 138); _tft->print("PID");
+        _tft->setCursor(130, 138); _tft->print("SETPOINT");
+        drawDivider(132);
+    }
 
     // --- Actual Temperature ---
     if (fabsf(status.filteredTemp - _lastActualTemp) > 0.05f) {
@@ -242,8 +280,12 @@ void DisplayManager::updateHomeScreen(const SystemStatus& status) {
         _tft->setTextSize(1);
         _tft->setTextColor(COLOR_TEXT_PRIMARY, COLOR_BG);
         _tft->setCursor(36, 63);
-        snprintf(buf, sizeof(buf), "%d / 5", status.currentStep);
-        _tft->print(buf);
+        if (status.currentStep == 0) {
+            _tft->print("READY");
+        } else {
+            snprintf(buf, sizeof(buf), "%d / 5", status.currentStep);
+            _tft->print(buf);
+        }
         _lastStep = status.currentStep;
     }
 
@@ -1064,18 +1106,18 @@ void DisplayManager::drawNumericEntry(const char* prompt, const char* value,
 // ============================================================
 
 void DisplayManager::showMessage(const char* msg, uint16_t color) {
-    int bx = 20, by = 100, bw = 280, bh = 40;
+    int bx = 20, by = 95, bw = 280, bh = 44;
     _tft->fillRect(bx, by, bw, bh, COLOR_HEADER_BG);
     _tft->drawRect(bx, by, bw, bh, color);
 
     _tft->setTextSize(1);
-    _tft->setTextColor(color);
+    _tft->setTextColor(color, COLOR_HEADER_BG);
     int textLen = strlen(msg) * 6;
     int cx = bx + (bw - textLen) / 2;
-    _tft->setCursor(cx, by + 16);
+    _tft->setCursor(cx, by + 18);
     _tft->print(msg);
 
-    _messageExpiry = millis() + 2000;
+    _messageExpiry = millis() + 2500;
 }
 
 // ============================================================
@@ -1084,9 +1126,10 @@ void DisplayManager::showMessage(const char* msg, uint16_t color) {
 
 void DisplayManager::drawHeader() {
     _tft->fillRect(0, 0, 320, 20, COLOR_HEADER_BG);
+    _tft->drawFastHLine(0, 20, 320, COLOR_TEMP_ACTUAL);
     _tft->setTextSize(2);
     _tft->setTextColor(COLOR_TEXT_PRIMARY, COLOR_HEADER_BG);
-    _tft->setCursor(6, 2);
+    _tft->setCursor(6, 3);
     _tft->print("TULIR");
 }
 
@@ -1138,7 +1181,7 @@ void DisplayManager::clearValueArea(int x, int y, int w, int h) {
     _tft->fillRect(x, y, w, h, COLOR_BG);
 }
 
-TFT_eSPI* DisplayManager::getTFT() {
+Adafruit_ILI9341* DisplayManager::getTFT() {
     return _tft;
 }
 

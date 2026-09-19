@@ -32,7 +32,14 @@
 #pragma once
 
 #include <Arduino.h>
-#include <TFT_eSPI.h>   // Bodmer's TFT_eSPI — pins configured via User_Setup.h
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ILI9341.h>   // TFT_eSPI was dropped: it fails to
+                                // communicate with this panel on this
+                                // ESP32-S3 board (confirmed via register
+                                // read returning 0x00 0x00 0x00), while
+                                // Adafruit_ILI9341 works on the exact
+                                // same pins. See Config.h for pin defines.
 #include "Config.h"
 
 class DisplayManager {
@@ -66,10 +73,10 @@ public:
     void drawBar(int x, int y, int w, int h, float percent, uint16_t fillColor);
 
     // Get the underlying TFT object for advanced use
-    TFT_eSPI* getTFT();
+    Adafruit_ILI9341* getTFT();
 
 private:
-    TFT_eSPI*          _tft;
+    Adafruit_ILI9341*  _tft;
     ScreenID           _currentScreen;
     unsigned long      _messageExpiry;
 

@@ -21,15 +21,16 @@
 
 PeltierControl::PeltierControl() {
     // Initialize stage pin configurations
-    // Note: MIDDLE_LEN (GPIO11) and TOP_LPWM (GPIO13) are hardwired:
+    // Note: MIDDLE_LEN (GPIO11) is hardwired:
     //   MIDDLE_LEN → 3.3V (always HIGH)  — GPIO11 freed for TFT MOSI
-    //   TOP_LPWM   → GND  (always LOW)   — GPIO13 freed for TFT SCK
-    // These freed pins are replaced with 255 (unused sentinel).
+    // TOP_RPWM moved from GPIO12 → GPIO42 to free GPIO12 for TFT native SCK.
+    // MIDDLE_LPWM/REN and TOP_LPWM/REN were moved off GPIO9/10/13/14
+    // (see Config.h) to free those proven-working pins for TFT DC/CS/MISO/RST.
     _stages[STAGE_BOTTOM] = { BOTTOM_RPWM_PIN, BOTTOM_LPWM_PIN,
                               BOTTOM_REN_PIN,  BOTTOM_LEN_PIN };
     _stages[STAGE_MIDDLE] = { MIDDLE_RPWM_PIN, MIDDLE_LPWM_PIN,
                               MIDDLE_REN_PIN,  255 };           // LEN hardwired 3.3V
-    _stages[STAGE_TOP]    = { TOP_RPWM_PIN,    255,             // LPWM hardwired GND
+    _stages[STAGE_TOP]    = { TOP_RPWM_PIN,    TOP_LPWM_PIN,   // RPWM=GPIO42
                               TOP_REN_PIN,     TOP_LEN_PIN };
 
     // Default power ratios from Config.h

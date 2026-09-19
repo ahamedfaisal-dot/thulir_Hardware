@@ -47,6 +47,22 @@
 #include "SafetyManager.h"
 
 // ============================================================
+//  TEST MODE
+//    0 = full firmware (normal operation)
+//    2 = Adafruit_ILI9341 display-only test (splash + RGB flash +
+//        ID read). Kept for future hardware debugging — this is the
+//        driver library DisplayManager now uses full-time, since
+//        TFT_eSPI never got a response from this panel on this board.
+// ============================================================
+#define TEST_MODE 0
+
+#if TEST_MODE == 2
+#include <Adafruit_GFX.h>
+#include <Adafruit_ILI9341.h>
+#include <SPI.h>
+#endif
+
+// ============================================================
 //  GLOBAL OBJECTS
 // ============================================================
 
@@ -109,6 +125,67 @@ void showScreen(ScreenID screen);
 
 // ============================================================
 //  SETUP
+// ============================================================
+
+#if TEST_MODE == 2
+// ============================================================
+//  ADAFRUIT_ILI9341 DISPLAY TEST — mirrors sih2026_input exactly
+//  Same pins (CS=10, DC=9, RST=14, MOSI=11, SCK=12, MISO=13),
+//  different driver library, to isolate library vs hardware.
+// ============================================================
+#define TEST2_MOSI 11
+#define TEST2_SCK  12
+#define TEST2_MISO 13
+#define TEST2_CS   10
+#define TEST2_DC    9
+#define TEST2_RST  14
+
+SPIClass tftSPI(FSPI);
+Adafruit_ILI9341 adaTft(&tftSPI, TEST2_DC, TEST2_CS, TEST2_RST);
+
+void setup() {
+    Serial.begin(DEBUG_BAUD);
+    delay(500);
+    Serial.println();
+    Serial.println("=== ADAFRUIT_ILI9341 DISPLAY TEST ===");
+    Serial.printf("[TEST] MOSI=%d SCK=%d MISO=%d CS=%d DC=%d RST=%d\n",
+                  TEST2_MOSI, TEST2_SCK, TEST2_MISO, TEST2_CS, TEST2_DC, TEST2_RST);
+
+    tftSPI.begin(TEST2_SCK, TEST2_MISO, TEST2_MOSI, TEST2_CS);
+    adaTft.begin();
+    adaTft.setRotation(3);
+    adaTft.fillScreen(ILI9341_BLACK);
+    Serial.println("[TEST] adaTft.begin() returned.");
+
+    uint8_t id1 = adaTft.readcommand8(0x04, 1);
+    uint8_t id2 = adaTft.readcommand8(0x04, 2);
+    uint8_t id3 = adaTft.readcommand8(0x04, 3);
+    Serial.printf("[TEST] Display ID bytes (0x04): 0x%02X 0x%02X 0x%02X\n", id1, id2, id3);
+    Serial.println("[TEST] ILI9341 should read approx: 0x00 0x93 0x41");
+    if (id1 == 0x00 && id2 == 0x00 && id3 == 0x00) {
+        Serial.println("[TEST] All zeros -> panel NOT responding even with Adafruit driver.");
+    } else {
+        Serial.println("[TEST] Got a non-trivial response -> panel IS responding to Adafruit driver!");
+    }
+}
+
+void loop() {
+    adaTft.fillScreen(ILI9341_RED);
+    Serial.println("[TEST] RED");
+    delay(1000);
+
+    adaTft.fillScreen(ILI9341_GREEN);
+    Serial.println("[TEST] GREEN");
+    delay(1000);
+
+    adaTft.fillScreen(ILI9341_BLUE);
+    Serial.println("[TEST] BLUE");
+    delay(1000);
+}
+
+#else
+// ============================================================
+//  FULL FIRMWARE setup()/loop() — active while TEST_MODE is 0
 // ============================================================
 
 void setup() {
@@ -292,6 +369,8 @@ void loop() {
         }
     #endif
 }
+
+#endif // TEST_MODE
 
 // ============================================================
 //  KEYPRESS ROUTING

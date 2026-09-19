@@ -106,18 +106,17 @@
 
 // --- BTS7960 #2 — MIDDLE Peltier (12V / 6A rated) ----------
 #define MIDDLE_RPWM_PIN    8
-#define MIDDLE_LPWM_PIN    9
-#define MIDDLE_REN_PIN     10
+#define MIDDLE_LPWM_PIN    47   // Moved from GPIO9 — freed for TFT DC (proven-working pin)
+#define MIDDLE_REN_PIN     48   // Moved from GPIO10 — freed for TFT CS (proven-working pin)
 // MIDDLE_LEN_PIN: always HIGH — hardwire this BTS7960 pin directly to 3.3V.
 // GPIO11 is reclaimed for TFT MOSI (native FSPI pin).
 // #define MIDDLE_LEN_PIN  11   // ← freed; wire BTS7960 L_EN to 3.3V
 
 // --- BTS7960 #3 — TOP Peltier (12V / 6A rated) -------------
-#define TOP_RPWM_PIN       12
-// TOP_LPWM_PIN: always LOW — hardwire this BTS7960 pin directly to GND.
-// GPIO13 is reclaimed for TFT SCK (native FSPI CLK pin).
-// #define TOP_LPWM_PIN    13   // ← freed; wire BTS7960 LPWM to GND
-#define TOP_REN_PIN        14
+#define TOP_RPWM_PIN       42   // Moved from GPIO12 — freed for TFT native FSPI CLK
+// TOP_LPWM_PIN: always LOW — software driven (GPIO13 freed for TFT MISO)
+#define TOP_LPWM_PIN       21   // Moved from GPIO13 — freed for TFT MISO (proven-working pin)
+#define TOP_REN_PIN        44   // Moved from GPIO14 — freed for TFT RST (proven-working pin)
 #define TOP_LEN_PIN        15
 
 // --- DS18B20 Temperature Sensor (cold side) -----------------
@@ -128,23 +127,28 @@
 #define DS18B20_HOT_PIN    43   // Change when installed
 
 // --- TFT Display (2.8" ILI9341 SPI, 320×240) ---------------
-//  Uses TFT_eSPI library (Bodmer). Pin config lives in User_Setup.h
-//  which must be copied to the TFT_eSPI library directory.
+//  Uses Adafruit_ILI9341 + Adafruit_GFX (NOT TFT_eSPI — TFT_eSPI v2.5.43
+//  on this ESP32-S3 board never got a response from the panel, confirmed
+//  by a register-ID read returning 0x00 0x00 0x00 on every attempt, even
+//  with correct pins/power/ground. Adafruit_ILI9341 works on the exact
+//  same wiring, so DisplayManager uses that instead).
 //
-//  Physical wiring:
-//    TFT MOSI  → GPIO 11  (native FSPI MOSI; MIDDLE_LEN hardwired to 3.3V)
-//    TFT SCK   → GPIO 13  (native FSPI CLK;  TOP_LPWM  hardwired to GND)
-//    TFT MISO  → not connected (write-only display)
-//    TFT CS    → GPIO 47
-//    TFT DC    → GPIO 48
-//    TFT RST   → GPIO 21
+//  Physical wiring (matches proven-working igem / sih2026_input projects
+//  on this same ESP32-S3 board — GPIO47/48/21 did NOT work reliably as
+//  SPI control lines on this hardware and caused a blank/black screen):
+//    TFT MOSI  → GPIO 11  (MIDDLE_LEN hardwired to 3.3V)
+//    TFT SCK   → GPIO 12  (TOP_RPWM moved to GPIO42)
+//    TFT MISO  → GPIO 13
+//    TFT CS    → GPIO 10
+//    TFT DC    → GPIO 9
+//    TFT RST   → GPIO 14
 //    TFT LED   → 3.3V
-//
-//  Note: TFT_eSPI reads pin numbers from User_Setup.h in the library
-//  folder, NOT from these defines. These are kept as documentation only.
-#define TFT_CS_PIN         47
-#define TFT_DC_PIN         48
-#define TFT_RST_PIN        21
+#define TFT_CS_PIN         10
+#define TFT_DC_PIN         9
+#define TFT_RST_PIN        14
+#define TFT_MOSI_PIN       11
+#define TFT_SCK_PIN        12
+#define TFT_MISO_PIN       13
 
 // --- 4×4 Matrix Keypad --------------------------------------
 //  Layout:
@@ -313,22 +317,22 @@
 // ============================================================
 //  TFT DISPLAY COLORS (RGB565)
 // ============================================================
-//  Industrial HMI palette — clean, professional, high-contrast.
-#define COLOR_BG              0x10A2  // Dark charcoal background
-#define COLOR_HEADER_BG       0x2945  // Steel header bar
-#define COLOR_TEXT_PRIMARY     0xFFFF  // White
-#define COLOR_TEXT_SECONDARY   0xB5B6  // Light gray
-#define COLOR_TEXT_DIM         0x7BEF  // Medium gray
-#define COLOR_TEMP_ACTUAL      0x5DDF  // Cool steel blue
-#define COLOR_TEMP_TARGET      0xFD20  // Amber
-#define COLOR_STATUS_OK        0x2DC9  // Forest green
-#define COLOR_STATUS_WARN      0xFCA0  // Orange
-#define COLOR_STATUS_ERR       0xF800  // Red
-#define COLOR_BAR_FILL         0x2B6D  // Teal
-#define COLOR_BAR_BG           0x3186  // Dark gray
-#define COLOR_DIVIDER          0x4A49  // Separator gray
-#define COLOR_HIGHLIGHT        0x001F  // Selection blue
-#define COLOR_MENU_SEL_BG      0x0010  // Dark navy selection bg
+//  Industrial HMI palette — high-contrast, vivid, professional.
+#define COLOR_BG               0x0000  // Pure black (maximum TFT contrast)
+#define COLOR_HEADER_BG        0x01E8  // Deep navy header bar
+#define COLOR_TEXT_PRIMARY     0xFFFF  // Pure White
+#define COLOR_TEXT_SECONDARY   0xCE79  // Bright Silver Gray
+#define COLOR_TEXT_DIM         0x9CD3  // Clear Light Gray
+#define COLOR_TEMP_ACTUAL      0x07FF  // Vibrant Cyan
+#define COLOR_TEMP_TARGET      0xFD20  // Amber Orange
+#define COLOR_STATUS_OK        0x07E0  // Bright Neon Green
+#define COLOR_STATUS_WARN      0xFFE0  // Bright Yellow
+#define COLOR_STATUS_ERR       0xF800  // Bright Red
+#define COLOR_BAR_FILL         0x07FF  // Vibrant Cyan
+#define COLOR_BAR_BG           0x2124  // Distinct dark card gray
+#define COLOR_DIVIDER          0x31A6  // Crisp visible separator line
+#define COLOR_HIGHLIGHT        0x03FF  // Vibrant Cyan highlight
+#define COLOR_MENU_SEL_BG      0x01E8  // Dark navy selection bg
 
 // ============================================================
 //  DFPLAYER AUDIO FILE MAP
