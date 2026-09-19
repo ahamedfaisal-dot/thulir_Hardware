@@ -11,7 +11,7 @@
  *  Drivers    : 3× BTS7960 H-bridge (unidirectional cooling)
  *  Display    : 2.8" ILI9341 SPI TFT 320×240
  *  Input      : 4×4 matrix keypad
- *  Sensor     : Waterproof DS18B20 (cold-side)
+ *  Sensor     : SHT3x I2C temperature + humidity (cold-side)
  *  Audio      : DFPlayer Mini (voice announcements)
  *  PSU        : 12 V 30 A SMPS
  *  Cooling    : 4× fans on large heatsink (hardwired to PSU)
@@ -126,11 +126,23 @@
 #define TOP_REN_PIN        44   // Moved from GPIO14 — freed for TFT RST (proven-working pin)
 #define TOP_LEN_PIN        15
 
-// --- DS18B20 Temperature Sensor (cold side) -----------------
-//  Wire a 4.7 kΩ pull-up from DATA to 3.3 V.
-#define DS18B20_PIN        3
+// --- SHT3x Temperature + Humidity Sensor (cold side) --------
+//  I2C sensor — replaces the DS18B20 for cold-side sensing.
+//  GPIO3 was freed by removing the DS18B20 1-Wire connection.
+//  GPIO46 is a boot-strapping pin (selects ROM boot-log verbosity);
+//  pulling it via the I2C bus's pull-up resistors only affects boot
+//  log printing, not board function — safe to use for SCL.
+//    VIN → 3.3V (2.2–5.5V tolerant, but board logic is 3.3V here)
+//    GND → GND
+//    SDA → GPIO 3
+//    SCL → GPIO 46
+#define SHT3X_SDA_PIN      3
+#define SHT3X_SCL_PIN      46
+#define SHT3X_I2C_ADDR     0x44   // Default SHT3x address (0x45 if ADDR pin high)
 
 // --- DS18B20 Hot-side sensor (optional, future) -------------
+//  Unrelated to the cold-side swap above — still 1-Wire DS18B20 if/when
+//  a hot-side sensor is installed (HOT_SIDE_SENSOR_ENABLED in Config.h).
 #define DS18B20_HOT_PIN    43   // Change when installed
 
 // --- TFT Display (2.8" ILI9341 SPI, 320×240) ---------------
@@ -246,17 +258,27 @@
 #define PID_OUTPUT_MAX      100.0f
 
 // ============================================================
-//  TEMPERATURE SETTINGS
+//  TEMPERATURE / HUMIDITY SETTINGS
 // ============================================================
-#define TEMP_CONVERSION_MS       750    // 12-bit conversion time; also paces
-                                         // the async request/read cycle —
-                                         // there is no separate read interval
+//  Cold-side sensor is now the I2C SHT3x (temperature + humidity).
+//  Its measurement is fast (a single I2C transaction, ~15ms for a
+//  high-repeatability reading) compared to the DS18B20's 750ms 1-Wire
+//  conversion, so it's simply read at a fixed interval rather than
+//  needing a multi-stage async state machine.
+#define SHT3X_READ_INTERVAL_MS    500    // How often to read the SHT3x
+
+#define TEMP_CONVERSION_MS       750    // DS18B20 12-bit conversion time —
+                                         // only used by the optional hot-side
+                                         // sensor now (see DS18B20_HOT_PIN)
 #define TEMP_FILTER_SAMPLES        5    // Moving-average window
 
 #define TEMP_SENSOR_MIN        -40.0f   // Valid range low
 #define TEMP_SENSOR_MAX         85.0f   // Valid range high
-#define TEMP_ERROR_VALUE      -127.0f   // DS18B20 disconnect code
+#define TEMP_ERROR_VALUE      -127.0f   // DS18B20 disconnect code (hot-side)
 #define TEMP_INVALID_THRESH     0.5f    // Reject jump > this per sample
+
+#define HUMIDITY_SENSOR_MIN      0.0f   // Valid RH% range low
+#define HUMIDITY_SENSOR_MAX    100.0f   // Valid RH% range high
 
 #define TEMP_CALIBRATION_OFFSET 0.0f    // Default cal offset
 #define TEMP_CAL_OFFSET_MAX     5.0f    // Warn if |offset| exceeds this
@@ -530,6 +552,10 @@ struct SystemStatus {
     bool        sensorValid;
     bool        hotSideSensorValid;
     float       hotSideTemp;
+
+    // Cold-side humidity (SHT3x, display-only — not used by PID/safety)
+    float       humidity;
+    bool        humidityValid;
 
     // Menu state
     uint8_t     menuSelection;

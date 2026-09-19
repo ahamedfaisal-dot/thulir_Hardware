@@ -22,6 +22,7 @@ DisplayManager::DisplayManager()
     , _lastBottomPWM(-1.0f)
     , _lastMiddlePWM(-1.0f)
     , _lastTopPWM(-1.0f)
+    , _lastHumidity(-1.0f)
     , _lastStep(0)
     , _lastState(STATE_BOOT)
     , _lastHoldElapsed(0xFFFFFFFF)
@@ -219,6 +220,7 @@ void DisplayManager::drawHomeScreen(const SystemStatus& status) {
     _lastBottomPWM = -1.0f;
     _lastMiddlePWM = -1.0f;
     _lastTopPWM = -1.0f;
+    _lastHumidity = -1.0f;
     _lastStep = 255;
     _lastState = (SystemState)255;
     _lastHoldElapsed = 0xFFFFFFFF;
@@ -248,6 +250,22 @@ void DisplayManager::updateHomeScreen(const SystemStatus& status) {
         _tft->setCursor(10, 138); _tft->print("PID");
         _tft->setCursor(130, 138); _tft->print("SETPOINT");
         drawDivider(132);
+    }
+
+    // --- Humidity (header, middle gap between title and state name) ---
+    if (fabsf(status.humidity - _lastHumidity) > 0.5f) {
+        _tft->fillRect(120, 3, 100, 14, COLOR_HEADER_BG);
+        _tft->setTextSize(1);
+        _tft->setCursor(120, 6);
+        if (status.humidityValid) {
+            _tft->setTextColor(COLOR_TEXT_SECONDARY, COLOR_HEADER_BG);
+            snprintf(buf, sizeof(buf), "RH:%.0f%%", status.humidity);
+        } else {
+            _tft->setTextColor(COLOR_TEXT_DIM, COLOR_HEADER_BG);
+            snprintf(buf, sizeof(buf), "RH:--");
+        }
+        _tft->print(buf);
+        _lastHumidity = status.humidity;
     }
 
     // --- Actual Temperature ---
@@ -905,7 +923,7 @@ void DisplayManager::drawAboutScreen() {
     _tft->setCursor(10, 95);   _tft->print(buf);
     _tft->setCursor(10, 112);  _tft->print("MCU: ESP32-S3");
     _tft->setCursor(10, 129);  _tft->print("Display: ILI9341 320x240");
-    _tft->setCursor(10, 146);  _tft->print("Sensor: DS18B20");
+    _tft->setCursor(10, 146);  _tft->print("Sensor: SHT3x (Temp+RH)");
     _tft->setCursor(10, 163);  _tft->print("Audio: DFPlayer Mini");
     _tft->setCursor(10, 180);  _tft->print("Drivers: 3x BTS7960");
 

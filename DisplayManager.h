@@ -88,6 +88,7 @@ private:
     float    _lastBottomPWM;
     float    _lastMiddlePWM;
     float    _lastTopPWM;
+    float    _lastHumidity;
     uint8_t  _lastStep;
     SystemState _lastState;
     unsigned long _lastHoldElapsed;

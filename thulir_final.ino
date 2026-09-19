@@ -222,7 +222,7 @@ void setup() {
     peltier.allPeltiersOff();  // Ensure safe state
 
     // Temperature sensor
-    Serial.println("[BOOT] Initializing DS18B20 sensor...");
+    Serial.println("[BOOT] Initializing SHT3x sensor (temperature + humidity)...");
     bool sensorOK = tempMgr.begin();
     sysStatus.sensorValid = sensorOK;
 
@@ -301,6 +301,8 @@ void loop() {
     sysStatus.actualTemp = tempMgr.getRawTemp();
     sysStatus.filteredTemp = tempMgr.getFilteredTemp();
     sysStatus.sensorValid = tempMgr.isSensorValid();
+    sysStatus.humidity = tempMgr.getHumidity();
+    sysStatus.humidityValid = tempMgr.isHumidityValid();
 
     // --- 2. Keypad scan (non-blocking) ---
     char key = keypadMgr.update();

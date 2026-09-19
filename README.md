@@ -1,6 +1,6 @@
 # TULIR — 3-Stage Cascaded Peltier Temperature Controller
 
-Production-quality firmware for ESP32-S3 driving three cascaded Peltier modules via BTS7960 H-bridge drivers with PID control, TFT HMI, keypad programming, voice announcements, and comprehensive safety.
+Production-quality firmware for ESP32-S3 driving three cascaded Peltier modules via BTS7960 H-bridge drivers with PID control, TFT HMI, keypad programming, voice announcements, and comprehensive safety. Cold-side sensing is an I2C SHT3x, which also provides a live humidity readout.
 
 ---
 
@@ -85,9 +85,10 @@ Production-quality firmware for ESP32-S3 driving three cascaded Peltier modules 
 |                          | L_EN           | GPIO 15               | Held HIGH                                                     |
 |                          | VCC            | 3.3V                  | Logic supply                                                  |
 |                          | GND            | GND                   | Common ground                                                 |
-| **DS18B20 (Cold side)**  | DATA           | GPIO 3                | 4.7kΩ pull-up to 3.3V                                         |
-|                          | VCC            | 3.3V                  |                                                                |
+| **SHT3x (Cold side, Temp+Humidity)** | VIN | 3.3V                  | 2.2–5.5V tolerant sensor, powered at 3.3V here                |
 |                          | GND            | GND                   |                                                                |
+|                          | SDA            | GPIO 3                | I2C data (freed from the old DS18B20 1-Wire pin)              |
+|                          | SCL            | GPIO 46               | I2C clock — see GPIO Pin Map note on GPIO46                   |
 | **DS18B20 (Hot side, optional)** | DATA   | GPIO 43               | Not installed by default — set `HOT_SIDE_SENSOR_ENABLED true` in Config.h to use |
 |                          | VCC            | 3.3V                  |                                                                |
 |                          | GND            | GND                   |                                                                |
@@ -178,6 +179,12 @@ See `Config.h` for the authoritative, editable pin definitions.
   below), `Serial` runs over native USB instead, so these pins are free —
   this firmware uses GPIO 43 (hot-side sensor, optional) and GPIO 44
   (BTS7960 #3 R_EN) safely under that board setting.
+- GPIO 45, 46: Boot-strapping pins (VDD_SPI voltage select / ROM boot-log
+  verbosity). GPIO 46 is used here for the SHT3x's I2C SCL — its I2C
+  pull-up only affects boot-log print verbosity, not board function, so
+  this is safe. **Do not use GPIO 45** for anything with a pull-up
+  resistor (I2C, etc.) — pulling it high at boot can select the wrong
+  VDD_SPI voltage and break flash access on some modules.
 
 **Why the TFT uses GPIO 9/10/11/12/13/14:**
 - These are the pins proven to actually work with this ILI9341 panel on this
@@ -203,8 +210,10 @@ Install via Arduino Library Manager:
 | -------------------- | --------------- | -------- | ------------------------------ |
 | **Adafruit_ILI9341** | Adafruit        | ≥1.5    | TFT display driver             |
 | **Adafruit_GFX_Library** | Adafruit    | ≥1.11   | Graphics primitives (required by Adafruit_ILI9341) |
-| OneWire              | Paul Stoffregen | ≥2.3    | 1-Wire protocol                |
-| DallasTemperature    | Miles Burton    | ≥3.9    | DS18B20 driver                 |
+| **Adafruit_SHT31_Library** | Adafruit  | ≥2.2    | Cold-side temperature + humidity sensor (I2C) |
+| **Adafruit_BusIO**   | Adafruit        | ≥1.14   | I2C/SPI transport (dependency of Adafruit_SHT31_Library) |
+| OneWire              | Paul Stoffregen | ≥2.3    | 1-Wire protocol — only needed for the optional hot-side DS18B20 |
+| DallasTemperature    | Miles Burton    | ≥3.9    | DS18B20 driver — only needed for the optional hot-side sensor |
 | Keypad               | Mark Stanley    | ≥3.1    | Matrix keypad                  |
 | DFRobotDFPlayerMini  | DFRobot         | ≥1.0.5  | Audio player                   |
 
@@ -242,7 +251,7 @@ thulir_final/
 ├── PeltierControl.h      — BTS7960 driver class declaration
 ├── PeltierControl.cpp    — LEDC PWM, cascade power distribution
 ├── TemperatureManager.h  — Temperature sensor class declaration
-├── TemperatureManager.cpp— DS18B20 async reads, filtering, validation
+├── TemperatureManager.cpp— SHT3x temp+humidity reads (+ optional hot-side DS18B20), filtering, validation
 ├── RecipeManager.h       — Recipe storage class declaration
 ├── RecipeManager.cpp     — 5-step recipe, NVS persistence
 ├── KeypadManager.h       — Keypad class declaration
@@ -348,7 +357,7 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 | 1 | Test ESP32-S3 | Upload blink sketch, check Serial Monitor    | Serial output at 115200 baud       |
 | 2 | Test TFT      | Upload TULIR firmware, check for boot screen | "TULIR Initializing..." on display |
 | 3 | Test Keypad   | Press keys on HOME screen, go to Menu        | Keys register, menu navigates      |
-| 4 | Test DS18B20  | Check boot log for sensor detection          | "Cold-side DS18B20 initialized"    |
+| 4 | Test SHT3x    | Check boot log for sensor detection          | "SHT3x initialized" with a plausible temp/RH pair |
 | 5 | Test DFPlayer | Menu → Test → 4 (Test DFPlayer)            | "System starting" audio plays      |
 
 ### Phase 2: Motor Driver Verification (No Peltier Connected)
@@ -401,7 +410,7 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 | #  | Step              | Procedure                          | Expected Result                      |
 | -- | ----------------- | ---------------------------------- | ------------------------------------ |
 | 24 | Emergency Stop    | Press C → D during active process | Peltiers off, EMERGENCY STOP screen  |
-| 25 | Sensor disconnect | Unplug DS18B20 during operation    | FAULT screen, Peltiers off           |
+| 25 | Sensor disconnect | Unplug SHT3x during operation      | FAULT screen, Peltiers off           |
 | 26 | Power restart     | Power cycle during operation       | System boots to IDLE, no auto-resume |
 
 ---
@@ -428,15 +437,23 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 > trying the other driver library is a legitimate next step — see
 > `TEST_MODE 2` in `thulir_final.ino` for a ready-made isolated test.
 
-### Temperature Sensor Issues
+### Temperature / Humidity Sensor Issues (SHT3x)
+
+| Problem              | Possible Cause              | Solution                                            |
+| --------------------- | ---------------------------- | ---------------------------------------------------- |
+| "SHT3x not found"    | Bad wiring or wrong address | Check VIN/GND/SDA/SCL; confirm `SHT3X_I2C_ADDR` matches the board (0x44 default, 0x45 if ADDR pin high) |
+| Reads NaN / invalid   | I2C bus glitch or bad wiring | Check SDA/SCL continuity and pull-ups; the code already rejects NaN reads |
+| Humidity shows "RH:--" | Same I2C failure as above    | Fix the I2C connection — humidity uses the same read as temperature |
+| Noisy readings        | Electrical interference      | Keep I2C wires short and away from the 12A/6A/6A power wiring |
+| Sudden jump rejected  | Real glitch, or threshold too tight | See `TEMP_INVALID_THRESH` in Config.h if legitimate fast changes are being rejected |
+
+### Optional Hot-Side DS18B20 Issues
 
 | Problem            | Possible Cause            | Solution                                     |
 | ------------------ | ------------------------- | -------------------------------------------- |
-| "Sensor not found" | Bad wiring                | Check DATA/VCC/GND, verify 4.7kΩ pull-up    |
-| Reads −127°C     | Disconnected sensor       | Check connections, try different GPIO        |
+| "Sensor not found" | Bad wiring, or `HOT_SIDE_SENSOR_ENABLED` still false | Check DATA/VCC/GND, verify 4.7kΩ pull-up, flip the flag in Config.h |
+| Reads −127°C     | Disconnected sensor       | Check connections                             |
 | Reads 85°C        | Power-on reset value      | Sensor not initializing — check power       |
-| Noisy readings     | Electrical interference   | Route sensor wire away from power cables     |
-| Slow response      | Sensor in waterproof tube | Normal for waterproof DS18B20 (thermal mass) |
 
 ### Peltier / BTS7960 Issues
 
