@@ -431,22 +431,28 @@
 // ============================================================
 //  DFPLAYER AUDIO FILE MAP
 // ============================================================
-//  Files must be on microSD as /mp3/0001.mp3 through /mp3/0012.mp3
-//  Change these indices if your files are numbered differently.
-#define AUDIO_SYSTEM_START     1
-#define AUDIO_STEP1            2
-#define AUDIO_STEP2            3
-#define AUDIO_STEP3            4
-#define AUDIO_STEP4            5
-#define AUDIO_STEP5            6
-#define AUDIO_PROCESS_COMPLETE 7
-#define AUDIO_EMERGENCY_STOP   8
-#define AUDIO_SENSOR_ERROR     9
-#define AUDIO_OVER_TEMP       10
-#define AUDIO_RAMP_STARTED    11
-#define AUDIO_MINUS20_REACHED 12
+//  Tracks on microSD match /mp3/0001.mp3 through /mp3/0011.mp3:
+//    0001 = Step 1 ("Step One — Starting")
+//    0002 = Step 2 ("Step Two — Cooling")
+//    0003 = Step 3 ("Step Three — Deep Freeze")
+//    0004 = Step 4 ("Step Four — Stabilizing")
+//    0005 = Emergency ("Warning — Temperature Dropping")
+//    0006 = Process complete ("Process Completed Successfully")
+//    0007 = Welcome ("Welcome to THULIR CryoLab")
+//    0008 = Wizard 1 ("Enter Step One Duration")
+//    0009 = Wizard 2 ("Enter Step Two Duration")
+//    0010 = Wizard 3 ("Enter Step Three Duration")
+//    0011 = Wizard 4 ("Enter Step Four Duration")
+#include "hmi_audio.h"
+
+// Backwards compatibility aliases
+#define AUDIO_SYSTEM_START     AUDIO_WELCOME
+#define AUDIO_EMERGENCY_STOP   AUDIO_EMERGENCY
+#define AUDIO_SENSOR_ERROR     AUDIO_EMERGENCY
+#define AUDIO_OVER_TEMP        AUDIO_EMERGENCY
 
 #define DFPLAYER_VOLUME        25      // 0–30
+
 
 // ============================================================
 //  NVS STORAGE KEYS

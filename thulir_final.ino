@@ -75,6 +75,11 @@ DisplayManager    displayMgr;
 AudioManager      audioMgr;
 SafetyManager     safetyMgr;
 
+// Helper to access underlying DFRobotDFPlayerMini reference for hmi_audio.h functions
+inline DFRobotDFPlayerMini& getDFPlayer() {
+    return audioMgr.dfPlayer();
+}
+
 SystemStatus      sysStatus;
 
 // ============================================================
@@ -306,8 +311,8 @@ void setup() {
     sysStatus.actualTemp = tempMgr.getRawTemp();
     showScreen(SCREEN_HOME);
 
-    // Announce system start
-    audioMgr.announceSystemStart();
+    // Announce system start ("Welcome to THULIR CryoLab" - Track 7)
+    audioMgr.announceWelcome();
 
     // If sensor failed at boot, show warning
     if (!sensorOK) {
@@ -529,8 +534,9 @@ void handleProgramKey(char key) {
         showScreen(SCREEN_PROGRAM);
     }
     else if (key == KEY_ENTER) {
-        // Edit selected step
+        // Edit selected step & announce wizard duration prompt (Tracks 8-11)
         showScreen(SCREEN_STEP_EDIT);
+        audioMgr.announceWizard(sysStatus.editStep + 1);
     }
     else if (key == KEY_CONFIRM) {
         // Save recipe to NVS
@@ -745,8 +751,8 @@ void handleTestKey(char key) {
         displayMgr.showMessage("KEYPAD TEST OK", COLOR_STATUS_OK);
     }
     else if (key == '4') {
-        // Test DFPlayer
-        audioMgr.announceSystemStart();
+        // Test DFPlayer (plays Welcome announcement)
+        audioMgr.announceWelcome();
         displayMgr.showMessage("PLAYING AUDIO...", COLOR_TEMP_ACTUAL);
     }
     else if (key == '5') {
@@ -888,9 +894,6 @@ void startProcess() {
         return;
     }
 
-    // Announce system start
-    audioMgr.announceSystemStart();
-
     // Reset PID
     pid.reset();
 
@@ -997,10 +1000,6 @@ void enterRampState() {
                   "Gains: Kp=%.1f Ki=%.2f Kd=%.1f\n",
                   sysStatus.rampStartTemp, RAMP_RATE_DEFAULT, RAMP_FINAL_TARGET,
                   ff, RAMP_KP, RAMP_KI, RAMP_KD);
-
-    // Announce
-    audioMgr.announceStepStart(5);
-    audioMgr.announceRampStarted();
 
     // Schedule one-shot display check — ramp mode also stresses the 12V supply.
     displayCheckPending = true;
@@ -1165,7 +1164,6 @@ void updateRampState() {
     if (newSetpoint <= RAMP_FINAL_TARGET &&
         sysStatus.filteredTemp <= (RAMP_FINAL_TARGET + TARGET_TOLERANCE)) {
         Serial.println("[STEP 5] RAMP COMPLETE — -20°C reached!");
-        audioMgr.announceMinus20Reached();
         completeProcess();
     }
 }

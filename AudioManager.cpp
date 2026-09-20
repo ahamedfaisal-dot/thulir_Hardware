@@ -6,7 +6,7 @@
  */
 
 #include "AudioManager.h"
-#include <DFRobotDFPlayerMini.h>
+#include "Config.h"
 
 AudioManager::AudioManager()
     : _serial(1)  // UART1
@@ -15,7 +15,6 @@ AudioManager::AudioManager()
     , _playing(false)
     , _lastPlayTime(0)
     , _lastTrack(0)
-    , _pendingTrack(0)
 {
 }
 
@@ -35,42 +34,29 @@ bool AudioManager::begin() {
     // Give DFPlayer time to initialize after power-on
     delay(500);
 
-    if (!_player->begin(_serial, /*isACK=*/true, /*doReset=*/true)) {
+    // Using isACK=false ensures non-blocking command execution and tolerance for clone chips
+    if (!_player->begin(_serial, /*isACK=*/false, /*doReset=*/true)) {
         Serial.println("[AUDIO] WARNING: DFPlayer Mini not detected");
-        Serial.println("[AUDIO] Check wiring: ESP32 TX→DFPlayer RX, DFPlayer TX→ESP32 RX");
+        Serial.println("[AUDIO] Check wiring: ESP32 TX(GPIO 1) -> DFPlayer RX, DFPlayer TX -> ESP32 RX(GPIO 2)");
         Serial.println("[AUDIO] System will continue without audio announcements");
         _available = false;
         return false;
     }
 
-    _player->volume(DFPLAYER_VOLUME);
+    _available = true;
+    audio_setVolume(*_player, DFPLAYER_VOLUME);
     _player->outputDevice(DFPLAYER_DEVICE_SD);
 
-    _available = true;
     Serial.printf("[AUDIO] DFPlayer Mini initialized. Volume: %d\n", DFPLAYER_VOLUME);
-
     return true;
 }
 
 void AudioManager::update() {
     if (!_available || !_player) return;
 
-    // Check if playback has finished (non-blocking)
+    // Check if estimated playback interval has elapsed
     if (_playing && (millis() - _lastPlayTime > AUDIO_MIN_INTERVAL)) {
-        // Read DFPlayer status to check if still playing
-        // The DFPlayer doesn't provide a reliable "done" signal,
-        // so we use a minimum interval between announcements.
         _playing = false;
-
-        // If a track was requested while we were still "playing" the
-        // previous one, it was throttled rather than dropped — play it
-        // now instead of silently losing it (e.g. Step 5's "ramp started"
-        // announcement immediately following the "step 5" announcement).
-        if (_pendingTrack != 0) {
-            uint16_t track = _pendingTrack;
-            _pendingTrack = 0;
-            playTrack(track);
-        }
     }
 
     // Check for DFPlayer errors (non-blocking read)
@@ -82,65 +68,76 @@ void AudioManager::update() {
     }
 }
 
+void AudioManager::announceWelcome() {
+    playTrack(AUDIO_WELCOME);
+}
+
 void AudioManager::announceSystemStart() {
-    playTrack(AUDIO_SYSTEM_START);
+    announceWelcome();
 }
 
 void AudioManager::announceStepStart(uint8_t step) {
-    if (step >= 1 && step <= 5) {
-        // Step 1 = track 2, Step 2 = track 3, etc.
-        playTrack(AUDIO_STEP1 + (step - 1));
+    switch (step) {
+        case 1: playTrack(AUDIO_STEP1); break;
+        case 2: playTrack(AUDIO_STEP2); break;
+        case 3: playTrack(AUDIO_STEP3); break;
+        case 4: playTrack(AUDIO_STEP4); break;
+        default: break;
+    }
+}
+
+void AudioManager::announceWizard(uint8_t step) {
+    switch (step) {
+        case 1: playTrack(AUDIO_WIZARD_1); break;
+        case 2: playTrack(AUDIO_WIZARD_2); break;
+        case 3: playTrack(AUDIO_WIZARD_3); break;
+        case 4: playTrack(AUDIO_WIZARD_4); break;
+        default: break;
     }
 }
 
 void AudioManager::announceProcessComplete() {
-    playTrack(AUDIO_PROCESS_COMPLETE);
+    playTrack(AUDIO_COMPLETE);
 }
 
 void AudioManager::announceEmergencyStop() {
-    playTrack(AUDIO_EMERGENCY_STOP);
+    playTrack(AUDIO_EMERGENCY);
 }
 
 void AudioManager::announceSensorError() {
-    playTrack(AUDIO_SENSOR_ERROR);
+    announceEmergencyStop();
 }
 
 void AudioManager::announceOverTemp() {
-    playTrack(AUDIO_OVER_TEMP);
+    announceEmergencyStop();
 }
 
 void AudioManager::announceRampStarted() {
-    playTrack(AUDIO_RAMP_STARTED);
+    // Step 5 ramp - no dedicated audio track on SD card
 }
 
 void AudioManager::announceMinus20Reached() {
-    playTrack(AUDIO_MINUS20_REACHED);
+    // -20 reached - no dedicated audio track on SD card
 }
 
-void AudioManager::playTrack(uint16_t track) {
+void AudioManager::playTrack(uint8_t track) {
     if (!_available || !_player) return;
 
-    // Enforce minimum interval between announcements
-    unsigned long now = millis();
-    if (_playing && (now - _lastPlayTime) < AUDIO_MIN_INTERVAL) {
-        _pendingTrack = track;
-        Serial.printf("[AUDIO] Deferring track %d (too soon after %d) — will play next\n",
-                      track, _lastTrack);
-        return;
-    }
-
-    _player->playMp3Folder(track);
-    _lastPlayTime = now;
+    audio_play(*_player, track);
+    _lastPlayTime = millis();
     _lastTrack = track;
     _playing = true;
+}
 
-    Serial.printf("[AUDIO] Playing track %d\n", track);
+void AudioManager::stop() {
+    if (!_available || !_player) return;
+    audio_stop(*_player);
+    _playing = false;
 }
 
 void AudioManager::setVolume(uint8_t vol) {
     if (!_available || !_player) return;
-    vol = (vol > 30) ? 30 : vol;
-    _player->volume(vol);
+    audio_setVolume(*_player, vol);
 }
 
 bool AudioManager::isAvailable() const {

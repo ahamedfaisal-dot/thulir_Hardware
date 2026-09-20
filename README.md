@@ -564,24 +564,23 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 
 ## DFPlayer Audio File Map
 
-Place these MP3 files on the microSD card:
+Place these MP3 files on the microSD card in the `/mp3/` directory:
 
 ```
-/mp3/0001.mp3 — "System starting"
-/mp3/0002.mp3 — "Step 1"
-/mp3/0003.mp3 — "Step 2"
-/mp3/0004.mp3 — "Step 3"
-/mp3/0005.mp3 — "Step 4"
-/mp3/0006.mp3 — "Step 5"
-/mp3/0007.mp3 — "Process complete"
-/mp3/0008.mp3 — "Emergency stop"
-/mp3/0009.mp3 — "Temperature sensor error"
-/mp3/0010.mp3 — "Over temperature fault"
-/mp3/0011.mp3 — "Ramp started"
-/mp3/0012.mp3 — "Minus twenty degrees reached"
+/mp3/0001.mp3 — "Step One — Starting" (AUDIO_STEP1)
+/mp3/0002.mp3 — "Step Two — Cooling" (AUDIO_STEP2)
+/mp3/0003.mp3 — "Step Three — Deep Freeze" (AUDIO_STEP3)
+/mp3/0004.mp3 — "Step Four — Stabilizing" (AUDIO_STEP4)
+/mp3/0005.mp3 — "Warning — Temperature Dropping" (AUDIO_EMERGENCY)
+/mp3/0006.mp3 — "Process Completed Successfully" (AUDIO_COMPLETE)
+/mp3/0007.mp3 — "Welcome to THULIR CryoLab" (AUDIO_WELCOME)
+/mp3/0008.mp3 — "Enter Step One Duration" (AUDIO_WIZARD_1)
+/mp3/0009.mp3 — "Enter Step Two Duration" (AUDIO_WIZARD_2)
+/mp3/0010.mp3 — "Enter Step Three Duration" (AUDIO_WIZARD_3)
+/mp3/0011.mp3 — "Enter Step Four Duration" (AUDIO_WIZARD_4)
 ```
 
-File numbering must match `AUDIO_*` constants in Config.h.
+File numbering matches `AudioTrack` enum in `hmi_audio.h` and `Config.h`.
 
 ---
 
