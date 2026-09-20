@@ -1209,20 +1209,34 @@ Adafruit_ILI9341* DisplayManager::getTFT() {
     return _tft;
 }
 
-bool DisplayManager::isAlive() {
-    if (!_tft) return false;
-
+static bool readDisplayIDOnce(Adafruit_ILI9341* tft) {
     // Read the ILI9341's driver-version/driver-ID bytes (RDDID, 0x04).
     // A healthy panel reports a fixed, non-trivial pair here; a panel
     // that's been silently hardware-reset (e.g. by an RST-line glitch
-    // from nearby PWM/motor noise) responds with all-zero or all-0xFF —
+    // from nearby electrical noise) responds with all-zero or all-0xFF —
     // the same signature used during initial bring-up diagnostics.
-    uint8_t id2 = _tft->readcommand8(0x04, 2);
-    uint8_t id3 = _tft->readcommand8(0x04, 3);
+    uint8_t id2 = tft->readcommand8(0x04, 2);
+    uint8_t id3 = tft->readcommand8(0x04, 3);
 
     if (id2 == 0x00 && id3 == 0x00) return false;
     if (id2 == 0xFF && id3 == 0xFF) return false;
     return true;
+}
+
+bool DisplayManager::isAlive() {
+    if (!_tft) return false;
+
+    // The ID readback itself travels over the same noisy SPI/MISO lines
+    // that caused the original problem, so a single bad read can be the
+    // *check* glitching, not the display. A genuinely reset panel reads
+    // bad consistently; a flaky read on an otherwise-fine panel usually
+    // doesn't repeat immediately after. Require two failed reads in a
+    // row (with a short gap) before believing it, so a one-off noise
+    // hit on the check doesn't trigger an unnecessary re-init.
+    if (readDisplayIDOnce(_tft)) return true;
+
+    delay(5);
+    return readDisplayIDOnce(_tft);
 }
 
 // ============================================================

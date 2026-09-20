@@ -89,11 +89,14 @@ unsigned long lastRampUpdate    = 0;
 unsigned long lastDisplayHealthCheck = 0;
 uint8_t       displayHealthFailCount = 0;
 
-// Watchdog tuning: check every 3s; recover after 2 consecutive failures
-// (avoids a false trigger from a one-off SPI hiccup during the check
-// itself, while still recovering within ~6-9s of a real RST glitch).
-#define DISPLAY_HEALTH_CHECK_INTERVAL_MS  3000
-#define DISPLAY_HEALTH_FAIL_THRESHOLD     2
+// Watchdog tuning: check every 4s; recover after 3 consecutive failures
+// (~12-16s worst case before recovery). isAlive() already double-checks
+// internally (two reads, 5ms apart) before reporting a single failure,
+// so this outer threshold is a second layer against false triggers —
+// together they should only fire a re-init for a real, sustained panel
+// reset, not routine SPI noise from the 12V system being on.
+#define DISPLAY_HEALTH_CHECK_INTERVAL_MS  4000
+#define DISPLAY_HEALTH_FAIL_THRESHOLD     3
 
 // ============================================================
 //  FORWARD DECLARATIONS
@@ -371,11 +374,19 @@ void loop() {
         lastDisplayUpdate = now;
     }
 
-    // --- 7b. Display watchdog (time-gated) ---
+    // --- 7b. Display watchdog (time-gated, active process only) ---
     // Recovers from a noise-induced hardware reset on the TFT's RST line
-    // (seen when the Peltier stages are drawing real current) without
-    // needing a manual ESP32 reboot.
-    if ((now - lastDisplayHealthCheck) >= DISPLAY_HEALTH_CHECK_INTERVAL_MS) {
+    // without needing a manual ESP32 reboot. Only runs while a process is
+    // actually active (approach/hold/ramp/transition) — that's when the
+    // 12V system is doing real work and the display actually matters;
+    // no need to spend cycles polling it while sitting idle.
+    bool processActive = (sysStatus.state == STATE_STEP_APPROACH ||
+                           sysStatus.state == STATE_STEP_HOLD ||
+                           sysStatus.state == STATE_STEP5_RAMP ||
+                           sysStatus.state == STATE_STEP_TRANSITION);
+
+    if (processActive &&
+        (now - lastDisplayHealthCheck) >= DISPLAY_HEALTH_CHECK_INTERVAL_MS) {
         lastDisplayHealthCheck = now;
 
         if (displayMgr.isAlive()) {
@@ -392,6 +403,11 @@ void loop() {
                 displayHealthFailCount = 0;
             }
         }
+    } else if (!processActive) {
+        // Not running — don't let a stale timer immediately fire a
+        // check the instant a process starts; keep it aligned to a
+        // fresh interval from whenever the process actually begins.
+        lastDisplayHealthCheck = now;
     }
 
     // --- 8. Serial debug (time-gated) ---

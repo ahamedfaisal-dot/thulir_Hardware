@@ -450,7 +450,7 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 | Garbled display       | Wrong rotation                               | Change `setRotation()` in `DisplayManager::begin()`                      |
 | Wrong colors          | RGB vs BGR byte order                        | Adafruit_ILI9341 defaults to RGB; check the panel datasheet if colors look swapped |
 | Flickering            | Full redraw too often                        | Increase `DISPLAY_UPDATE_INTERVAL` in Config.h                           |
-| Turns white specifically when Peltiers are running at high PWM (idle/USB-only power is fine) | Noise/ground-bounce from BTS7960 switching or SMPS inrush glitching the RST line — a real hardware reset of the panel, not a code bug | Firmware now self-heals this automatically (see watchdog note below) within ~6-9s. For a permanent fix: strengthen the common ground bond between the ESP32 and the 12V/BTS7960 domain (single short, thick, direct wire — not a long/daisy-chained one), add a 100nF-1µF capacitor from RST to GND right at the display, route SPI/RST wiring away from the 12V/PWM/fan wiring, and add bulk capacitance on the 12V rail near the BTS7960 modules |
+| Turns white whenever the 12V system is powered (even at 0% PWM, idle) | Noise/ground-bounce from the SMPS itself (not specifically PWM switching) glitching the RST line — a real hardware reset of the panel, not a code bug | Firmware now self-heals this automatically (see watchdog note below) within ~12-16s. For a permanent fix: strengthen the common ground bond between the ESP32 and the 12V/SMPS domain (single short, thick, direct wire — not a long/daisy-chained one), add a 100nF-1µF capacitor from RST to GND right at the display, route SPI/RST wiring away from the 12V wiring, and add bulk capacitance directly on the SMPS output |
 
 > This project moved from `TFT_eSPI` to `Adafruit_ILI9341` after `TFT_eSPI`
 > never got a response from this specific panel on this specific ESP32-S3
@@ -460,14 +460,23 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 > trying the other driver library is a legitimate next step — see
 > `TEST_MODE 2` in `thulir_final.ino` for a ready-made isolated test.
 
-> **Display watchdog:** `thulir_final.ino`'s main loop checks the panel's
-> health every 3s (`DISPLAY_HEALTH_CHECK_INTERVAL_MS`) by reading its ID
-> registers via `DisplayManager::isAlive()`. After 2 consecutive failures
-> (`DISPLAY_HEALTH_FAIL_THRESHOLD`), it silently calls
+> **Display watchdog:** only active while a process is actually running
+> (`STATE_STEP_APPROACH`/`STEP_HOLD`/`STEP5_RAMP`/`STEP_TRANSITION`) —
+> that's when the 12V system is doing real work and the display actually
+> matters, so there's no reason to poll it while idle. Once a process
+> starts, `thulir_final.ino`'s main loop checks the panel's health every
+> 4s (`DISPLAY_HEALTH_CHECK_INTERVAL_MS`) via
+> `DisplayManager::isAlive()`, which itself reads the panel's ID
+> registers twice (5ms apart) before reporting a failure — since that
+> readback travels over the same noisy SPI/MISO lines as everything
+> else, a single bad read can be the *check* glitching, not the panel,
+> and this filters that out. After 3 consecutive failed checks
+> (`DISPLAY_HEALTH_FAIL_THRESHOLD`, ~12-16s), it silently calls
 > `displayMgr.begin(false)` (re-init without the splash screen/delay) and
-> redraws the current screen — recovering automatically from an
-> RST-glitch reset within ~6-9 seconds instead of needing a manual
-> reboot. This is a mitigation, not a fix for the underlying noise —
+> redraws the current screen — recovering automatically from a real
+> RST-glitch reset instead of needing a manual reboot, without
+> over-triggering on routine noise. This is a mitigation, not a fix for
+> the underlying noise —
 > still do the hardware fixes above if this triggers often.
 
 ### Temperature / Humidity Sensor Issues (SHT3x)
