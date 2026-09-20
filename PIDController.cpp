@@ -71,10 +71,19 @@ bool PIDController::compute(float setpoint, float measurement) {
     _pTerm = _kp * error;
 
     // --- Integral term with anti-windup ---
-    _iTerm += _ki * error * dt;
-
-    // Clamp integral to output limits to prevent windup
-    _iTerm = CLAMP(_iTerm, _outputMin, _outputMax);
+    // Integral separation: only accumulate while reasonably close to the
+    // setpoint. Without this, a long approach from far away (e.g. ambient
+    // 32°C down to a 25°C target) builds a huge integral while error is
+    // large; once temp crosses near/under the setpoint, that big integral
+    // bleeds off very slowly against a now-small error, keeping output
+    // pegged high long after it should back off. Freezing accumulation
+    // outside PID_INTEGRAL_ZONE_DEG avoids building windup in the first
+    // place, rather than trying to unwind it after the fact.
+    if (fabsf(error) <= PID_INTEGRAL_ZONE_DEG) {
+        _iTerm += _ki * error * dt;
+        // Clamp integral to output limits to prevent windup
+        _iTerm = CLAMP(_iTerm, _outputMin, _outputMax);
+    }
 
     // --- Derivative term (on measurement, not error) ---
     // Using derivative-on-measurement avoids "derivative kick"

@@ -36,7 +36,7 @@ DisplayManager::~DisplayManager() {
     _tft = nullptr;
 }
 
-bool DisplayManager::begin() {
+bool DisplayManager::begin(bool showSplash) {
     // Adafruit_ILI9341 + the SPIClass it drives MUST be static/global —
     // never heap-allocated — for the same reason TFT_eSPI required it:
     // the underlying SPI peripheral state must persist for the life of
@@ -52,11 +52,15 @@ bool DisplayManager::begin() {
     _tft->setRotation(3);  // Landscape, 320×240, USB connector on left
     _tft->fillScreen(COLOR_BG);
 
-    // Splash screen
-    drawCenteredText(95, "TULIR", COLOR_TEXT_PRIMARY, 3);
-    drawCenteredText(135, "3-Stage Peltier Controller", COLOR_TEMP_ACTUAL, 1);
-    drawCenteredText(160, "Initializing...", COLOR_TEXT_SECONDARY, 1);
-    delay(1200);  // Hold splash screen so user sees boot progress
+    if (showSplash) {
+        // Splash screen — skipped on a silent watchdog recovery re-init
+        // so the live dashboard doesn't disappear for over a second
+        // every time the display glitches back to life.
+        drawCenteredText(95, "TULIR", COLOR_TEXT_PRIMARY, 3);
+        drawCenteredText(135, "3-Stage Peltier Controller", COLOR_TEMP_ACTUAL, 1);
+        drawCenteredText(160, "Initializing...", COLOR_TEXT_SECONDARY, 1);
+        delay(1200);  // Hold splash screen so user sees boot progress
+    }
 
     Serial.println("[DISPLAY] ILI9341 via Adafruit_ILI9341 initialized (320x240 landscape)");
     Serial.printf("[DISPLAY] MOSI=%d SCK=%d MISO=%d CS=%d DC=%d RST=%d\n",
@@ -628,12 +632,12 @@ void DisplayManager::drawStepEditScreen(const SystemStatus& status,
     _tft->setTextSize(1);
     _tft->setTextColor(COLOR_TEXT_DIM);
     _tft->setCursor(10, 180);
-    _tft->print("ENTER NEW TIME + # TO CONFIRM");
+    _tft->print("PRESS D, THEN TYPE MINUTES, THEN #");
 
     drawDivider(200);
     _tft->setCursor(10, 210);
     _tft->setTextColor(COLOR_TEXT_DIM);
-    _tft->print("0-9=DIGITS  #=CONFIRM  C=BACK");
+    _tft->print("D=EDIT TIME  #=CONFIRM  C=BACK");
 }
 
 // ============================================================
@@ -1203,6 +1207,22 @@ void DisplayManager::clearValueArea(int x, int y, int w, int h) {
 
 Adafruit_ILI9341* DisplayManager::getTFT() {
     return _tft;
+}
+
+bool DisplayManager::isAlive() {
+    if (!_tft) return false;
+
+    // Read the ILI9341's driver-version/driver-ID bytes (RDDID, 0x04).
+    // A healthy panel reports a fixed, non-trivial pair here; a panel
+    // that's been silently hardware-reset (e.g. by an RST-line glitch
+    // from nearby PWM/motor noise) responds with all-zero or all-0xFF —
+    // the same signature used during initial bring-up diagnostics.
+    uint8_t id2 = _tft->readcommand8(0x04, 2);
+    uint8_t id3 = _tft->readcommand8(0x04, 3);
+
+    if (id2 == 0x00 && id3 == 0x00) return false;
+    if (id2 == 0xFF && id3 == 0xFF) return false;
+    return true;
 }
 
 // ============================================================

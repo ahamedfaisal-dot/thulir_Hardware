@@ -47,8 +47,17 @@ public:
     DisplayManager();
     ~DisplayManager();
 
-    // Initialize TFT display
-    bool begin();
+    // Initialize TFT display. showSplash=false skips the splash screen
+    // and its delay — used for silent recovery re-init (see isAlive()),
+    // not the normal boot path.
+    bool begin(bool showSplash = true);
+
+    // Health check: reads the panel's ID registers over SPI/MISO and
+    // checks the response is plausible. A noise glitch on RST (e.g. from
+    // nearby high-current PWM switching) can hardware-reset the panel
+    // without the ESP32 itself resetting — this detects that so the
+    // firmware can self-heal instead of requiring a manual reboot.
+    bool isAlive();
 
     // Draw a specific screen (full redraw)
     void drawScreen(ScreenID screen, const SystemStatus& status, const Recipe& recipe);

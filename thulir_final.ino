@@ -86,6 +86,14 @@ unsigned long lastPIDUpdate     = 0;
 unsigned long lastSerialDebug   = 0;
 unsigned long lastSafetyCheck   = 0;
 unsigned long lastRampUpdate    = 0;
+unsigned long lastDisplayHealthCheck = 0;
+uint8_t       displayHealthFailCount = 0;
+
+// Watchdog tuning: check every 3s; recover after 2 consecutive failures
+// (avoids a false trigger from a one-off SPI hiccup during the check
+// itself, while still recovering within ~6-9s of a real RST glitch).
+#define DISPLAY_HEALTH_CHECK_INTERVAL_MS  3000
+#define DISPLAY_HEALTH_FAIL_THRESHOLD     2
 
 // ============================================================
 //  FORWARD DECLARATIONS
@@ -363,6 +371,29 @@ void loop() {
         lastDisplayUpdate = now;
     }
 
+    // --- 7b. Display watchdog (time-gated) ---
+    // Recovers from a noise-induced hardware reset on the TFT's RST line
+    // (seen when the Peltier stages are drawing real current) without
+    // needing a manual ESP32 reboot.
+    if ((now - lastDisplayHealthCheck) >= DISPLAY_HEALTH_CHECK_INTERVAL_MS) {
+        lastDisplayHealthCheck = now;
+
+        if (displayMgr.isAlive()) {
+            displayHealthFailCount = 0;
+        } else {
+            displayHealthFailCount++;
+            Serial.printf("[DISPLAY] Health check failed (%d/%d)\n",
+                          displayHealthFailCount, DISPLAY_HEALTH_FAIL_THRESHOLD);
+
+            if (displayHealthFailCount >= DISPLAY_HEALTH_FAIL_THRESHOLD) {
+                Serial.println("[DISPLAY] Unresponsive — re-initializing (silent recovery)");
+                displayMgr.begin(false);        // skip splash, re-init only
+                showScreen(sysStatus.currentScreen);  // redraw whatever was on screen
+                displayHealthFailCount = 0;
+            }
+        }
+    }
+
     // --- 8. Serial debug (time-gated) ---
     #if DEBUG_ENABLED
         if ((now - lastSerialDebug) >= SERIAL_PRINT_INTERVAL) {
@@ -503,26 +534,14 @@ void handleStepEditKey(char key) {
     Recipe& recipe = recipeMgr.getRecipeForEdit();
     StepConfig& sc = recipe.steps[step];
 
-    // Temperature selection (for steps with options)
-    if (sc.isTempSelectable) {
-        if (key == '1' && sc.tempOptionCount >= 1) {
-            sc.targetTemp = sc.tempOptions[0];
-            showScreen(SCREEN_STEP_EDIT);
-            return;
-        }
-        if (key == '2' && sc.tempOptionCount >= 2) {
-            sc.targetTemp = sc.tempOptions[1];
-            showScreen(SCREEN_STEP_EDIT);
-            return;
-        }
-        if (key == '3' && sc.tempOptionCount >= 3) {
-            sc.targetTemp = sc.tempOptions[2];
-            showScreen(SCREEN_STEP_EDIT);
-            return;
-        }
-    }
-
-    // Numeric entry for hold time
+    // Numeric entry for hold time — checked FIRST, same pattern as the
+    // PID Tune screen. This must take priority over the temperature
+    // shortcuts below: on selectable steps (Step 2/4), '1'/'2'/'3' are
+    // also temp-select shortcuts, and without this ordering + explicit
+    // start trigger, typing "12" or "31" minutes would corrupt the
+    // target temperature instead of entering the buffer (the bug this
+    // fixes — those digits were unconditionally intercepted before,
+    // even mid-entry).
     if (keypadMgr.getNumericInput().active) {
         if (keypadMgr.processNumericKey(key)) {
             const NumericInput& ni = keypadMgr.getNumericInput();
@@ -543,10 +562,33 @@ void handleStepEditKey(char key) {
         return;
     }
 
-    // Start numeric entry for hold time
-    if (key >= '0' && key <= '9') {
+    // Temperature selection (for steps with options) — only reachable
+    // when NOT already typing a hold time, so these never collide.
+    if (sc.isTempSelectable) {
+        if (key == '1' && sc.tempOptionCount >= 1) {
+            sc.targetTemp = sc.tempOptions[0];
+            showScreen(SCREEN_STEP_EDIT);
+            return;
+        }
+        if (key == '2' && sc.tempOptionCount >= 2) {
+            sc.targetTemp = sc.tempOptions[1];
+            showScreen(SCREEN_STEP_EDIT);
+            return;
+        }
+        if (key == '3' && sc.tempOptionCount >= 3) {
+            sc.targetTemp = sc.tempOptions[2];
+            showScreen(SCREEN_STEP_EDIT);
+            return;
+        }
+    }
+
+    // Start numeric entry for hold time — requires an explicit D press
+    // (not a bare digit) so a leading '1'/'2'/'3' in the time value
+    // (e.g. typing "15" minutes) never gets mistaken for a temp-select
+    // shortcut. Same trigger for every step, selectable or not, so the
+    // behavior is consistent and unambiguous everywhere.
+    if (key == KEY_ENTER) {
         keypadMgr.startNumericInput(false, false, 1, 999);
-        keypadMgr.processNumericKey(key);
         const NumericInput& ni = keypadMgr.getNumericInput();
         displayMgr.drawNumericEntry("HOLD TIME (min):", ni.buffer, 1, 999);
         return;

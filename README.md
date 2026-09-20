@@ -330,6 +330,15 @@ Kd =  5.0   — Derivative gain
 
 > ⚠ These are PLACEHOLDER values. You MUST tune them experimentally.
 
+> **Integral separation:** the integral term only accumulates while
+> `|actualTemp - setpoint|` is within `PID_INTEGRAL_ZONE_DEG` (default
+> 3.0°C, in Config.h). This prevents windup from building during a long
+> approach from far away (e.g. ambient temperature down to a step's
+> target) — without it, output can stay pegged near-max well after
+> crossing the setpoint, because a large accumulated integral bleeds off
+> very slowly against a now-small error. If you still see this after
+> tuning Kp/Ki/Kd, try narrowing `PID_INTEGRAL_ZONE_DEG`.
+
 ### Tuning Procedure
 
 1. **Open the PID screen** (Menu → PID TUNE)
@@ -441,6 +450,7 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 | Garbled display       | Wrong rotation                               | Change `setRotation()` in `DisplayManager::begin()`                      |
 | Wrong colors          | RGB vs BGR byte order                        | Adafruit_ILI9341 defaults to RGB; check the panel datasheet if colors look swapped |
 | Flickering            | Full redraw too often                        | Increase `DISPLAY_UPDATE_INTERVAL` in Config.h                           |
+| Turns white specifically when Peltiers are running at high PWM (idle/USB-only power is fine) | Noise/ground-bounce from BTS7960 switching or SMPS inrush glitching the RST line — a real hardware reset of the panel, not a code bug | Firmware now self-heals this automatically (see watchdog note below) within ~6-9s. For a permanent fix: strengthen the common ground bond between the ESP32 and the 12V/BTS7960 domain (single short, thick, direct wire — not a long/daisy-chained one), add a 100nF-1µF capacitor from RST to GND right at the display, route SPI/RST wiring away from the 12V/PWM/fan wiring, and add bulk capacitance on the 12V rail near the BTS7960 modules |
 
 > This project moved from `TFT_eSPI` to `Adafruit_ILI9341` after `TFT_eSPI`
 > never got a response from this specific panel on this specific ESP32-S3
@@ -449,6 +459,16 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 > If a display "should" work per every check above but still doesn't,
 > trying the other driver library is a legitimate next step — see
 > `TEST_MODE 2` in `thulir_final.ino` for a ready-made isolated test.
+
+> **Display watchdog:** `thulir_final.ino`'s main loop checks the panel's
+> health every 3s (`DISPLAY_HEALTH_CHECK_INTERVAL_MS`) by reading its ID
+> registers via `DisplayManager::isAlive()`. After 2 consecutive failures
+> (`DISPLAY_HEALTH_FAIL_THRESHOLD`), it silently calls
+> `displayMgr.begin(false)` (re-init without the splash screen/delay) and
+> redraws the current screen — recovering automatically from an
+> RST-glitch reset within ~6-9 seconds instead of needing a manual
+> reboot. This is a mitigation, not a fix for the underlying noise —
+> still do the hardware fixes above if this triggers often.
 
 ### Temperature / Humidity Sensor Issues (SHT3x)
 

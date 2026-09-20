@@ -280,6 +280,13 @@
 #define PID_OUTPUT_MIN        0.0f
 #define PID_OUTPUT_MAX      100.0f
 
+//  Integral separation zone: the integral term only accumulates while
+//  |actualTemp - setpoint| is within this many °C. Prevents windup from
+//  building during a long approach from far away (e.g. ambient down to
+//  a step's target), which otherwise causes output to stay pegged high
+//  well after crossing the setpoint. Tune alongside Kp/Ki/Kd.
+#define PID_INTEGRAL_ZONE_DEG  3.0f
+
 // ============================================================
 //  TEMPERATURE / HUMIDITY SETTINGS
 // ============================================================
