@@ -86,17 +86,18 @@ unsigned long lastPIDUpdate     = 0;
 unsigned long lastSerialDebug   = 0;
 unsigned long lastSafetyCheck   = 0;
 unsigned long lastRampUpdate    = 0;
-unsigned long lastDisplayHealthCheck = 0;
-uint8_t       displayHealthFailCount = 0;
 
-// Watchdog tuning: check every 4s; recover after 3 consecutive failures
-// (~12-16s worst case before recovery). isAlive() already double-checks
-// internally (two reads, 5ms apart) before reporting a single failure,
-// so this outer threshold is a second layer against false triggers —
-// together they should only fire a re-init for a real, sustained panel
-// reset, not routine SPI noise from the 12V system being on.
-#define DISPLAY_HEALTH_CHECK_INTERVAL_MS  4000
-#define DISPLAY_HEALTH_FAIL_THRESHOLD     3
+// Event-driven display watchdog:
+//   displayCheckPending = true once, shortly after a step starts.
+//   displayCheckAt      = millis() value at which to fire the one-shot check.
+//   The periodic isAlive() poll was removed — it itself caused white-screen
+//   flashes every 4 seconds due to ILI9341 SPI register reads mid-display.
+bool          displayCheckPending = false;
+unsigned long displayCheckAt      = 0;
+
+// Unused — kept for backward compat with #define references in comments only
+#define DISPLAY_HEALTH_CHECK_INTERVAL_MS  4000   // retained for reference
+#define DISPLAY_HEALTH_FAIL_THRESHOLD     1       // immediate reinit on failure
 
 // ============================================================
 //  FORWARD DECLARATIONS
@@ -389,41 +390,24 @@ void loop() {
         lastDisplayUpdate = now;
     }
 
-    // --- 7b. Display watchdog (time-gated, active process only) ---
-    // Recovers from a noise-induced hardware reset on the TFT's RST line
-    // without needing a manual ESP32 reboot. Only runs while a process is
-    // actually active (approach/hold/ramp/transition) — that's when the
-    // 12V system is doing real work and the display actually matters;
-    // no need to spend cycles polling it while sitting idle.
-    bool processActive = (sysStatus.state == STATE_STEP_APPROACH ||
-                           sysStatus.state == STATE_STEP_HOLD ||
-                           sysStatus.state == STATE_STEP5_RAMP ||
-                           sysStatus.state == STATE_STEP_TRANSITION);
-
-    if (processActive &&
-        (now - lastDisplayHealthCheck) >= DISPLAY_HEALTH_CHECK_INTERVAL_MS) {
-        lastDisplayHealthCheck = now;
-
-        if (displayMgr.isAlive()) {
-            displayHealthFailCount = 0;
+    // --- 7b. Display watchdog (EVENT-DRIVEN — one-shot post-start check) ---
+    //  The periodic isAlive() poll was removed because the SPI register read
+    //  that isAlive() performs itself caused the display to flash white every
+    //  4 seconds. Instead, a one-shot check fires ~4 seconds after each step
+    //  transition (when the 12V system starts heavy switching — the most
+    //  likely moment for a RST-line noise glitch). If that single check finds
+    //  the display unresponsive it reinitialises immediately. Otherwise the
+    //  watchdog is silent until the next step transition schedules a new check.
+    if (displayCheckPending && (now >= displayCheckAt)) {
+        displayCheckPending = false;
+        if (!displayMgr.isAlive()) {
+            Serial.println("[DISPLAY] Post-start check failed — reinitialising");
+            displayMgr.begin(false);               // silent recovery (no splash)
+            showScreen(sysStatus.currentScreen);   // redraw current screen
         } else {
-            displayHealthFailCount++;
-            Serial.printf("[DISPLAY] Health check failed (%d/%d)\n",
-                          displayHealthFailCount, DISPLAY_HEALTH_FAIL_THRESHOLD);
-
-            if (displayHealthFailCount >= DISPLAY_HEALTH_FAIL_THRESHOLD) {
-                Serial.println("[DISPLAY] Unresponsive — re-initializing (silent recovery)");
-                displayMgr.begin(false);        // skip splash, re-init only
-                showScreen(sysStatus.currentScreen);  // redraw whatever was on screen
-                displayHealthFailCount = 0;
-            }
+            Serial.println("[DISPLAY] Post-start check OK");
         }
-    } else if (!processActive) {
-        // Not running — don't let a stale timer immediately fire a
-        // check the instant a process starts; keep it aligned to a
-        // fresh interval from whenever the process actually begins.
-        lastDisplayHealthCheck = now;
-    }
+
 
     // --- 8. Serial debug (time-gated) ---
     #if DEBUG_ENABLED
@@ -565,14 +549,9 @@ void handleStepEditKey(char key) {
     Recipe& recipe = recipeMgr.getRecipeForEdit();
     StepConfig& sc = recipe.steps[step];
 
-    // Numeric entry for hold time — checked FIRST, same pattern as the
-    // PID Tune screen. This must take priority over the temperature
-    // shortcuts below: on selectable steps (Step 2/4), '1'/'2'/'3' are
-    // also temp-select shortcuts, and without this ordering + explicit
-    // start trigger, typing "12" or "31" minutes would corrupt the
-    // target temperature instead of entering the buffer (the bug this
-    // fixes — those digits were unconditionally intercepted before,
-    // even mid-entry).
+    // --- Numeric input active: ALL keys go to the numeric buffer ---
+    // This is checked FIRST so that once entry is started, nothing
+    // intercepts digits (including A/B temp-cycle keys below).
     if (keypadMgr.getNumericInput().active) {
         if (keypadMgr.processNumericKey(key)) {
             const NumericInput& ni = keypadMgr.getNumericInput();
@@ -585,7 +564,6 @@ void handleStepEditKey(char key) {
                 showScreen(SCREEN_STEP_EDIT);
             }
         } else {
-            // Update numeric entry display
             const NumericInput& ni = keypadMgr.getNumericInput();
             displayMgr.drawNumericEntry("HOLD TIME (min):",
                                         ni.buffer, 1, 999);
@@ -593,31 +571,45 @@ void handleStepEditKey(char key) {
         return;
     }
 
-    // Temperature selection (for steps with options) — only reachable
-    // when NOT already typing a hold time, so these never collide.
-    if (sc.isTempSelectable) {
-        if (key == '1' && sc.tempOptionCount >= 1) {
-            sc.targetTemp = sc.tempOptions[0];
-            showScreen(SCREEN_STEP_EDIT);
-            return;
+    // --- Temperature cycling via A (KEY_UP) / B (KEY_DOWN) for selectable steps ---
+    //  Replaces the old 1/2/3 direct-shortcut approach. Using A/B frees up all
+    //  digit keys (0-9) to start hold-time numeric entry directly, so the user
+    //  never needs to press D first and there is no digit-collision on any step.
+    if (sc.isTempSelectable &&
+        (key == KEY_UP || key == KEY_DOWN)) {
+        // Find the index of the currently selected temperature option
+        int8_t idx = -1;
+        for (uint8_t i = 0; i < sc.tempOptionCount; i++) {
+            if (fabsf(sc.targetTemp - sc.tempOptions[i]) < 0.5f) {
+                idx = (int8_t)i;
+                break;
+            }
         }
-        if (key == '2' && sc.tempOptionCount >= 2) {
-            sc.targetTemp = sc.tempOptions[1];
-            showScreen(SCREEN_STEP_EDIT);
-            return;
-        }
-        if (key == '3' && sc.tempOptionCount >= 3) {
-            sc.targetTemp = sc.tempOptions[2];
-            showScreen(SCREEN_STEP_EDIT);
-            return;
-        }
+        // If not found (custom value), snap to nearest option
+        if (idx < 0) idx = 0;
+
+        if (key == KEY_UP   && idx > 0)                    idx--;
+        if (key == KEY_DOWN && idx < (int8_t)(sc.tempOptionCount - 1)) idx++;
+
+        sc.targetTemp = sc.tempOptions[idx];
+        Serial.printf("[EDIT] Step %d temp set to %.0f C (option %d)\n",
+                      step + 1, sc.targetTemp, idx + 1);
+        showScreen(SCREEN_STEP_EDIT);
+        return;
     }
 
-    // Start numeric entry for hold time — requires an explicit D press
-    // (not a bare digit) so a leading '1'/'2'/'3' in the time value
-    // (e.g. typing "15" minutes) never gets mistaken for a temp-select
-    // shortcut. Same trigger for every step, selectable or not, so the
-    // behavior is consistent and unambiguous everywhere.
+    // --- Any digit (0-9) starts numeric entry AND feeds the digit in ---
+    //  User can type the hold time directly (e.g., '3','0','#' for 30 min)
+    //  without needing a D-press first. D also still works as a clean start.
+    if (key >= '0' && key <= '9') {
+        keypadMgr.startNumericInput(false, false, 1, 999);
+        keypadMgr.processNumericKey(key);            // feed the first digit
+        const NumericInput& ni = keypadMgr.getNumericInput();
+        displayMgr.drawNumericEntry("HOLD TIME (min):", ni.buffer, 1, 999);
+        return;
+    }
+
+    // D (KEY_ENTER) — start fresh numeric entry (clears buffer first)
     if (key == KEY_ENTER) {
         keypadMgr.startNumericInput(false, false, 1, 999);
         const NumericInput& ni = keypadMgr.getNumericInput();
@@ -958,6 +950,12 @@ void enterApproachState() {
     // Announce step
     audioMgr.announceStepStart(sysStatus.currentStep);
 
+    // Schedule a one-shot display health check 4 seconds from now.
+    // The 12V system begins heavy switching as soon as a step starts;
+    // that's the highest-risk window for an RST noise glitch.
+    displayCheckPending = true;
+    displayCheckAt = millis() + 4000UL;
+
     showScreen(SCREEN_HOME);
 }
 
@@ -1003,6 +1001,10 @@ void enterRampState() {
     // Announce
     audioMgr.announceStepStart(5);
     audioMgr.announceRampStarted();
+
+    // Schedule one-shot display check — ramp mode also stresses the 12V supply.
+    displayCheckPending = true;
+    displayCheckAt = millis() + 4000UL;
 
     showScreen(SCREEN_HOME);
 }

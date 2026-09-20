@@ -624,16 +624,21 @@ void DisplayManager::drawStepEditScreen(const SystemStatus& status,
         formatTemp(sc.targetTemp, buf, sizeof(buf));
         _tft->print(buf);
 
-        // Show options
+        // Show options with cycling indicator
         _tft->setTextSize(1);
         _tft->setTextColor(COLOR_TEXT_DIM);
         _tft->setCursor(10, 100);
-        _tft->print("SELECT:");
+        _tft->print("A/B to cycle:");
 
         for (int i = 0; i < sc.tempOptionCount; i++) {
             _tft->setCursor(10 + i * 90, 114);
-            _tft->setTextColor(COLOR_TEXT_PRIMARY);
-            snprintf(buf, sizeof(buf), "%d=%.0fC", i + 1, sc.tempOptions[i]);
+            // Highlight the currently selected option
+            if (fabsf(sc.targetTemp - sc.tempOptions[i]) < 0.5f) {
+                _tft->setTextColor(COLOR_TEMP_TARGET);
+            } else {
+                _tft->setTextColor(COLOR_TEXT_PRIMARY);
+            }
+            snprintf(buf, sizeof(buf), "%.0fC", sc.tempOptions[i]);
             _tft->print(buf);
         }
     } else {
@@ -665,12 +670,20 @@ void DisplayManager::drawStepEditScreen(const SystemStatus& status,
     _tft->setTextSize(1);
     _tft->setTextColor(COLOR_TEXT_DIM);
     _tft->setCursor(10, 180);
-    _tft->print("PRESS D, THEN TYPE MINUTES, THEN #");
+    if (sc.isTempSelectable) {
+        _tft->print("TYPE DIGITS THEN # FOR TIME  A/B=TEMP");
+    } else {
+        _tft->print("TYPE DIGITS THEN # TO SET TIME");
+    }
 
     drawDivider(200);
     _tft->setCursor(10, 210);
     _tft->setTextColor(COLOR_TEXT_DIM);
-    _tft->print("D=EDIT TIME  #=CONFIRM  C=BACK");
+    if (sc.isTempSelectable) {
+        _tft->print("A/B=TEMP  0-9=TIME  #=OK  C=BACK");
+    } else {
+        _tft->print("0-9=TIME  #=CONFIRM  C=BACK");
+    }
 }
 
 // ============================================================
