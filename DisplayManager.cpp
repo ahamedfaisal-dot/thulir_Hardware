@@ -28,6 +28,7 @@ DisplayManager::DisplayManager()
     , _lastHoldElapsed(0xFFFFFFFF)
     , _lastHoldDuration(0xFFFFFFFF)
     , _lastRampLag(false)
+    , _homeFrameReady(false)
 {
 }
 
@@ -75,7 +76,35 @@ bool DisplayManager::begin(bool showSplash) {
 
 void DisplayManager::drawScreen(ScreenID screen, const SystemStatus& status,
                                  const Recipe& recipe) {
+    // ---------------------------------------------------------------
+    //  HOME screen fast-path: if we are already on HOME and the static
+    //  frame is painted, skip fillScreen (eliminates the visible black
+    //  flash that occurs on every step transition / state change).
+    //  All dynamic fields are invalidated so updateHomeScreen redraws them.
+    // ---------------------------------------------------------------
+    bool wasAlreadyHome = (_currentScreen == SCREEN_HOME) && _homeFrameReady;
     _currentScreen = screen;
+
+    if (screen == SCREEN_HOME && wasAlreadyHome) {
+        _lastActualTemp   = -999.0f;
+        _lastTargetTemp   = -999.0f;
+        _lastSetpoint     = -999.0f;
+        _lastPidOutput    = -1.0f;
+        _lastBottomPWM    = -1.0f;
+        _lastMiddlePWM    = -1.0f;
+        _lastTopPWM       = -1.0f;
+        _lastHumidity     = -1.0f;
+        _lastStep         = 255;
+        _lastState        = (SystemState)255;
+        _lastHoldElapsed  = 0xFFFFFFFF;
+        _lastHoldDuration = 0xFFFFFFFF;
+        _lastRampLag      = false;
+        updateHomeScreen(status);
+        return;
+    }
+
+    // Full redraw for any other screen (or first time on HOME)
+    _homeFrameReady = false;
 
     // Reset cached values to force full redraw
     _lastActualTemp = -999.0f;
@@ -91,7 +120,10 @@ void DisplayManager::drawScreen(ScreenID screen, const SystemStatus& status,
     _tft->fillScreen(COLOR_BG);
 
     switch (screen) {
-        case SCREEN_HOME:           drawHomeScreen(status); break;
+        case SCREEN_HOME:
+            drawHomeScreen(status);
+            _homeFrameReady = true;
+            break;
         case SCREEN_MENU:           drawMenuScreen(status); break;
         case SCREEN_PROGRAM:        drawProgramScreen(recipe); break;
         case SCREEN_STEP_EDIT:      drawStepEditScreen(status, recipe); break;
@@ -106,7 +138,7 @@ void DisplayManager::drawScreen(ScreenID screen, const SystemStatus& status,
         case SCREEN_COMPLETE:       drawCompleteScreen(status); break;
         case SCREEN_STOPPED:        drawStoppedScreen(); break;
         case SCREEN_MANUAL_PWM:     drawManualPWMScreen(status); break;
-        default:                    drawHomeScreen(status); break;
+        default:                    drawHomeScreen(status); _homeFrameReady = true; break;
     }
 }
 
@@ -414,7 +446,8 @@ void DisplayManager::updateHomeScreen(const SystemStatus& status) {
         elapsed = millis() - status.stepStartTime;
     }
 
-    if (elapsed != _lastHoldElapsed || status.holdDurationMs != _lastHoldDuration) {
+    if ((elapsed / 1000UL) != (_lastHoldElapsed / 1000UL) ||
+        status.holdDurationMs != _lastHoldDuration) {
         // Elapsed
         clearValueArea(10, 172, 140, 18);
         formatTime(elapsed, buf, sizeof(buf));

@@ -135,6 +135,17 @@ void serialDebugPrint();
 void showScreen(ScreenID screen);
 
 // ============================================================
+//  HELPER — Temperature-scaled feedforward
+// ============================================================
+//  Wraps PIDController::computeFeedforward(). Defined here so it
+//  is usable by enterApproachState, enterRampState, and updateRampState.
+//  Formula: FF% = (25 − setpoint) / (25 − (−27)) × 100
+//  Based on measured hardware: 12V/6.1V/2.45V → −27°C at 100% output.
+inline float computeFF(float setpoint) {
+    return PIDController::computeFeedforward(setpoint);
+}
+
+// ============================================================
 //  SETUP
 // ============================================================
 
@@ -251,7 +262,11 @@ void setup() {
     pid.setTunings(kp, ki, kd);
     pid.setOutputLimits(PID_OUTPUT_MIN, PID_OUTPUT_MAX);
     pid.setSampleTime(PID_SAMPLE_TIME_MS);
-    Serial.printf("[BOOT] PID loaded: Kp=%.2f Ki=%.3f Kd=%.2f\n", kp, ki, kd);
+    pid.setIntegralZone(APPROACH_INTEGRAL_ZONE);   // default to approach zone
+    pid.setFeedforward(0.0f);                       // no FF until process starts
+    pid.setRateLimit(PID_OUTPUT_RATE_LIMIT);
+    Serial.printf("[BOOT] PID loaded: Kp=%.2f Ki=%.3f Kd=%.2f  FF=auto  Slew=%.0f%%/s\n",
+                  kp, ki, kd, PID_OUTPUT_RATE_LIMIT);
 
     // Load calibration offset
     float calOffset = recipeMgr.loadCalibrationOffset();
@@ -922,14 +937,26 @@ void enterApproachState() {
     sysStatus.holdTimerRunning = false;
     sysStatus.stepStartTime = millis();
 
-    // Soft-reset PID for smooth transition between steps
+    // --- PID: approach gain set + temperature-scaled feedforward ---
+    // Switch to APPROACH gains (optimised for reaching a fixed setpoint).
+    // Load NVS-stored Kp/Ki/Kd as the user-tuned APPROACH gains; the
+    // APPROACH_K* compile-time constants are the boot defaults only.
+    pid.setTunings(APPROACH_KP, APPROACH_KI, APPROACH_KD);
+    pid.setIntegralZone(APPROACH_INTEGRAL_ZONE);
+    // Feedforward: pre-load baseline output based on measured hardware data.
+    // Eliminates the slow ramp-from-zero and reduces overshoot.
+    float ff = computeFF(sysStatus.targetTemp);
+    pid.setFeedforward(ff);
+    pid.setRateLimit(PID_OUTPUT_RATE_LIMIT);
+    // Soft-reset PID for smooth transition; slew limiter starts from current output.
     pid.softReset(0.3f);
+
+    Serial.printf("[STEP %d] Approaching %.1f °C  FF=%.1f%%  Gains: Kp=%.1f Ki=%.2f Kd=%.1f\n",
+                  sysStatus.currentStep, sysStatus.targetTemp,
+                  ff, APPROACH_KP, APPROACH_KI, APPROACH_KD);
 
     // Announce step
     audioMgr.announceStepStart(sysStatus.currentStep);
-
-    Serial.printf("[STEP %d] Approaching target: %.1f °C\n",
-                  sysStatus.currentStep, sysStatus.targetTemp);
 
     showScreen(SCREEN_HOME);
 }
@@ -958,15 +985,24 @@ void enterRampState() {
     sysStatus.currentSetpoint = sysStatus.rampStartTemp;
     sysStatus.targetTemp = RAMP_FINAL_TARGET;
 
-    // Reset PID for ramp mode
+    // --- PID: ramp gain set + feedforward for current temperature ---
+    // Higher Kp for tracking a moving setpoint; minimal Ki to avoid windup
+    // while the setpoint continuously moves away.
+    pid.setTunings(RAMP_KP, RAMP_KI, RAMP_KD);
+    pid.setIntegralZone(RAMP_INTEGRAL_ZONE);
+    float ff = computeFF(sysStatus.rampStartTemp);
+    pid.setFeedforward(ff);
+    pid.setRateLimit(PID_OUTPUT_RATE_LIMIT);
     pid.softReset(0.5f);
+
+    Serial.printf("[STEP 5] RAMP from %.1f°C at %.1f°C/min to %.1f°C  FF=%.1f%%  "
+                  "Gains: Kp=%.1f Ki=%.2f Kd=%.1f\n",
+                  sysStatus.rampStartTemp, RAMP_RATE_DEFAULT, RAMP_FINAL_TARGET,
+                  ff, RAMP_KP, RAMP_KI, RAMP_KD);
 
     // Announce
     audioMgr.announceStepStart(5);
     audioMgr.announceRampStarted();
-
-    Serial.printf("[STEP 5] RAMP started from %.1f °C at %.1f °C/min to %.1f °C\n",
-                  sysStatus.rampStartTemp, RAMP_RATE_DEFAULT, RAMP_FINAL_TARGET);
 
     showScreen(SCREEN_HOME);
 }
@@ -1113,6 +1149,11 @@ void updateRampState() {
 
     sysStatus.currentSetpoint = newSetpoint;
 
+    // Update feedforward to track the moving setpoint.
+    // As temperature drops, FF increases to pre-load the additional power
+    // needed — the PID then only corrects the residual lag/lead error.
+    pid.setFeedforward(computeFF(newSetpoint));
+
     // Check ramp lag
     float lag = sysStatus.filteredTemp - sysStatus.currentSetpoint;
     sysStatus.rampLagAmount = lag;
@@ -1142,12 +1183,15 @@ void showScreen(ScreenID screen) {
 
 void serialDebugPrint() {
     Serial.printf("[DBG] State=%-14s Step=%d/%d  Temp=%.2f°C  SP=%.2f°C  "
-                  "PID=%.1f%%  BOT=%.0f%% MID=%.0f%% TOP=%.0f%%",
+                  "PID=%.1f%%(FF=%.0f P=%.1f I=%.1f D=%.1f)  "
+                  "BOT=%.0f%% MID=%.0f%% TOP=%.0f%%",
                   getStateName(sysStatus.state),
                   sysStatus.currentStep, 5,
                   sysStatus.filteredTemp,
                   sysStatus.currentSetpoint,
                   sysStatus.pidOutput,
+                  pid.getFeedforward(),
+                  pid.getPterm(), pid.getIterm(), pid.getDterm(),
                   sysStatus.bottomPWM,
                   sysStatus.middlePWM,
                   sysStatus.topPWM);

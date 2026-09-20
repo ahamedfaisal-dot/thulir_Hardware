@@ -259,33 +259,61 @@
 #define MIN_PWM_THRESHOLD    0.0f   // % — set >0 if needed
 
 // ============================================================
-//  PID CONTROLLER DEFAULTS
+//  PID CONTROLLER — ADVANCED CONFIGURATION
 // ============================================================
-//  *** THESE ARE CONSERVATIVE PLACEHOLDERS ***
-//  You MUST tune them experimentally on your hardware.
+//  Two gain sets: APPROACH (Steps 1–4, fixed setpoint) and
+//  RAMP (Step 5, continuously moving setpoint at −1°C/min).
 //
-//  Start with proportional-only (Ki=0, Kd=0), increase Kp
-//  until you see slight oscillation, then add Ki for zero
-//  steady-state error, and Kd for damping.
+//  PID computes: output = FF + Kp·e + Ki·∫e·dt − Kd·(dPV/dt)
+//  where e = actualTemp − setpoint (positive = need more cooling)
+//  output = 0–100% cooling demand
+//  FF    = temperature-scaled feedforward baseline
 //
-//  PID computes: output = Kp·e + Ki·∫e·dt + Kd·de/dt
-//  where e = actualTemp − setpoint (positive = too warm)
-//  output = 0–100 (% cooling demand)
+//  DEFAULT_K* are the NVS-loadable fallback gains (loaded at boot).
+//  They are also the starting Approach gains until hardware-tuned.
+#define DEFAULT_KP           20.0f
+#define DEFAULT_KI            0.3f
+#define DEFAULT_KD            8.0f
 
-#define DEFAULT_KP           15.0f
-#define DEFAULT_KI            0.5f
-#define DEFAULT_KD            5.0f
-
-#define PID_SAMPLE_TIME_MS    500   // PID compute interval
+#define PID_SAMPLE_TIME_MS    500   // PID compute interval (ms)
 #define PID_OUTPUT_MIN        0.0f
 #define PID_OUTPUT_MAX      100.0f
 
-//  Integral separation zone: the integral term only accumulates while
-//  |actualTemp - setpoint| is within this many °C. Prevents windup from
-//  building during a long approach from far away (e.g. ambient down to
-//  a step's target), which otherwise causes output to stay pegged high
-//  well after crossing the setpoint. Tune alongside Kp/Ki/Kd.
-#define PID_INTEGRAL_ZONE_DEG  3.0f
+// --- Approach gains (Steps 1–4: reaching and holding a fixed setpoint) ---
+#define APPROACH_KP          20.0f
+#define APPROACH_KI           0.3f
+#define APPROACH_KD           8.0f
+#define APPROACH_INTEGRAL_ZONE  5.0f   // °C — integral only inside this band
+
+// --- Ramp gains (Step 5: tracking a moving setpoint at −1°C/min) ---
+//  Higher Kp to track a moving target; lower Ki to avoid windup while
+//  the setpoint keeps moving; tighter zone to stay locked on the ramp.
+#define RAMP_KP              28.0f
+#define RAMP_KI               0.1f
+#define RAMP_KD               5.0f
+#define RAMP_INTEGRAL_ZONE    2.0f    // °C
+
+// --- Temperature-scaled feedforward ---
+//  Hardware data (measured): full cascade (12V / 6.1V / 2.45V) achieves
+//  −27°C from a 25°C ambient reference. Using this, feedforward is
+//  computed as a linear fraction of how far the setpoint is below ambient:
+//    FF% = (FF_AMBIENT_REF − setpoint) / (FF_AMBIENT_REF − FF_MAX_COOL) × 100
+//  Examples:
+//    setpoint =  25°C → FF ≈  0%   (Step 1, ambient — no pre-load needed)
+//    setpoint =  15°C → FF ≈ 19%   (Step 2 @ 15°C)
+//    setpoint =   4°C → FF ≈ 40%   (Step 3)
+//    setpoint =   0°C → FF ≈ 48%   (Step 4)
+//    setpoint = −10°C → FF ≈ 67%   (mid-ramp)
+//    setpoint = −20°C → FF ≈ 86%   (ramp final target)
+#define PID_FF_AMBIENT_REF    25.0f   // °C — reference point (no cooling needed)
+#define PID_FF_MAX_COOL      -27.0f   // °C — min temp at 100% cascade (measured)
+#define PID_FF_MAX_PCT        92.0f   // % — cap to leave headroom for PID correction
+
+// --- Output slew rate limit ---
+//  Caps how fast the PID output can change per second. Prevents sudden
+//  large output swings that cause overshoot and oscillation, especially
+//  on setpoint changes between steps.
+#define PID_OUTPUT_RATE_LIMIT  15.0f  // %/second (0.0 = disabled)
 
 // ============================================================
 //  TEMPERATURE / HUMIDITY SETTINGS

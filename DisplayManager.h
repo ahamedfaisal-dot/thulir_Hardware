@@ -103,6 +103,8 @@ private:
     unsigned long _lastHoldElapsed;
     unsigned long _lastHoldDuration;
     bool     _lastRampLag;
+    bool     _homeFrameReady;       // true once static HOME frame is painted;
+                                    // skips fillScreen on re-entry to HOME
 
     // Drawing helpers
     void drawHeader();
