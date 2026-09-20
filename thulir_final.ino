@@ -407,7 +407,7 @@ void loop() {
         } else {
             Serial.println("[DISPLAY] Post-start check OK");
         }
-
+    }
 
     // --- 8. Serial debug (time-gated) ---
     #if DEBUG_ENABLED
