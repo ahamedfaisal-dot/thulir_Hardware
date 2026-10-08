@@ -9,6 +9,10 @@
  *  Controller : ESP32-S3
  *  Peltiers   : 3× cascaded (Bottom 12A / Middle 6A / Top 6A)
  *  Drivers    : 3× BTS7960 H-bridge (unidirectional cooling)
+ *               RPWM only — LPWM/R_EN/L_EN all hardwired to GND/3.3V
+ *  Servos     : 2× hobby servo (SG90/MG90S, 5V) on GPIO 22 and 23
+ *               Open on power-on; open 15 s on each step completion;
+ *               close on process complete; open on fault/stop
  *  Display    : 2.8" ILI9341 SPI TFT 320×240
  *  Input      : 4×4 matrix keypad
  *  Sensor     : SHT3x I2C temperature + humidity (cold-side)
@@ -82,6 +86,25 @@
 #define HOT_SIDE_MAX_TEMP       75.0f  // °C — shut down Peltiers above this
 #define HOT_SIDE_RECOVERY_TEMP  50.0f  // °C — allow restart below this
 
+// ============================================================
+//  WEB DASHBOARD (WiFi telemetry to Flask server)
+// ============================================================
+//  Set WEB_DASHBOARD_ENABLED false to fully disable WiFi/HTTP code
+//  (e.g. no network available) — control loop runs identical either way.
+#define WEB_DASHBOARD_ENABLED   true
+
+#define WIFI_SSID          "SEMINAR_HALL"
+#define WIFI_PASSWORD      "B109#rec"
+
+// Set to the PC's LAN IP running the Flask server (see thulir_dashboard
+// project). Find it with `ipconfig` (Windows) — look for IPv4 Address.
+#define WEB_SERVER_HOST    "172.16.12.62"   // <-- CHANGE to your PC's IP
+#define WEB_SERVER_PORT    5000
+#define WEB_SERVER_PATH    "/api/data"
+
+#define WEB_POST_INTERVAL_MS   2000    // How often to POST telemetry
+#define WEB_WIFI_RETRY_MS      10000   // Retry WiFi connect if dropped
+
 // Cold-side sanity ceiling — catches a cold-side reading that's gone
 // implausibly high (e.g. heatsink/airflow failure feeding back into the
 // cold side). Deliberately its own constant, separate from
@@ -118,25 +141,40 @@
 // ============================================================
 
 // --- BTS7960 #1 — BOTTOM Peltier (12V / 12A rated) ---------
+//  RPWM: PWM control signal from ESP32 (GPIO 4)
+//  LPWM: hardwired to GND — no GPIO used in actual build
+//  R_EN: hardwired to 3.3V — no GPIO used in actual build
+//  L_EN: hardwired to 3.3V — no GPIO used in actual build
+//  NOTE: The defines below are retained for PeltierControl.cpp
+//  compatibility (it initialises these pins in software as a
+//  belt-and-suspenders measure). In the actual build these three
+//  lines are physically wired to GND / 3.3V, not to these GPIOs.
 #define BOTTOM_RPWM_PIN    4    // PWM signal → BTS7960 RPWM
-#define BOTTOM_LPWM_PIN    5    // Held LOW  → BTS7960 LPWM
-#define BOTTOM_REN_PIN     6    // Held HIGH → BTS7960 R_EN
-#define BOTTOM_LEN_PIN     7    // Held HIGH → BTS7960 L_EN
+#define BOTTOM_LPWM_PIN    5    // retained for code compat (pin not used — LPWM hardwired to GND)
+#define BOTTOM_REN_PIN     6    // retained for code compat (pin not used — R_EN hardwired to 3.3V)
+#define BOTTOM_LEN_PIN     7    // retained for code compat (pin not used — L_EN hardwired to 3.3V)
 
 // --- BTS7960 #2 — MIDDLE Peltier (12V / 6A rated) ----------
+//  RPWM: PWM control signal from ESP32 (GPIO 8)
+//  LPWM: hardwired to GND — no GPIO used in actual build
+//  R_EN: hardwired to 3.3V — no GPIO used in actual build
+//  L_EN: hardwired to 3.3V — no GPIO used in actual build
 #define MIDDLE_RPWM_PIN    8
-#define MIDDLE_LPWM_PIN    47   // Moved from GPIO9 — freed for TFT DC (proven-working pin)
-#define MIDDLE_REN_PIN     48   // Moved from GPIO10 — freed for TFT CS (proven-working pin)
-// MIDDLE_LEN_PIN: always HIGH — hardwire this BTS7960 pin directly to 3.3V.
-// GPIO11 is reclaimed for TFT MOSI (native FSPI pin).
+#define MIDDLE_LPWM_PIN    47   // retained for code compat (pin not used — LPWM hardwired to GND)
+#define MIDDLE_REN_PIN     48   // retained for code compat (pin not used — R_EN hardwired to 3.3V)
+// MIDDLE_LEN_PIN: hardwired to 3.3V — GPIO11 freed for TFT MOSI.
 // #define MIDDLE_LEN_PIN  11   // ← freed; wire BTS7960 L_EN to 3.3V
 
 // --- BTS7960 #3 — TOP Peltier (12V / 6A rated) -------------
+//  RPWM: PWM control signal from ESP32 (GPIO 42)
+//  LPWM: hardwired to GND — no GPIO used in actual build
+//  R_EN: hardwired to 3.3V — no GPIO used in actual build
+//  L_EN: hardwired to 3.3V — no GPIO used in actual build
+//  (GPIO 42 was moved from GPIO12 to free native FSPI SCK for TFT)
 #define TOP_RPWM_PIN       42   // Moved from GPIO12 — freed for TFT native FSPI CLK
-// TOP_LPWM_PIN: always LOW — software driven (GPIO13 freed for TFT MISO)
-#define TOP_LPWM_PIN       21   // Moved from GPIO13 — freed for TFT MISO (proven-working pin)
-#define TOP_REN_PIN        44   // Moved from GPIO14 — freed for TFT RST (proven-working pin)
-#define TOP_LEN_PIN        15
+#define TOP_LPWM_PIN       21   // retained for code compat (pin not used — LPWM hardwired to GND)
+#define TOP_REN_PIN        44   // retained for code compat (pin not used — R_EN hardwired to 3.3V)
+#define TOP_LEN_PIN        15   // retained for code compat (pin not used — L_EN hardwired to 3.3V)
 
 // --- SHT3x Temperature + Humidity Sensor (cold side) --------
 //  I2C sensor — replaces the DS18B20 for cold-side sensing.
@@ -166,7 +204,11 @@
 // --- DS18B20 Hot-side sensor (optional, future) -------------
 //  Unrelated to the cold-side swap above — still 1-Wire DS18B20 if/when
 //  a hot-side sensor is installed (HOT_SIDE_SENSOR_ENABLED in Config.h).
-#define DS18B20_HOT_PIN    43   // Change when installed
+//  Originally GPIO43, but OneWire on that pin hung the chip during
+//  bring-up (GPIO43/44 are the ESP32-S3's default UART0 pins, which
+//  the boot ROM also drives). Moved to GPIO37 — free, non-strapping,
+//  confirmed present on this board's header, unused elsewhere here.
+#define DS18B20_HOT_PIN    37   // Change when installed
 
 // --- TFT Display (2.8" ILI9341 SPI, 320×240) ---------------
 //  Uses Adafruit_ILI9341 + Adafruit_GFX (NOT TFT_eSPI — TFT_eSPI v2.5.43
@@ -409,6 +451,49 @@
 #define FAN_CONTROL_ENABLED  false
 
 // ============================================================
+//  SERVO MOTOR CONFIGURATION
+// ============================================================
+//  Two servo motors (SG90 / MG90S or equivalent 5V hobby servos)
+//  are mounted on the enclosure lid / sample chamber.
+//
+//  Behaviour:
+//    • POWER ON  → both servos OPEN immediately (boot sequence)
+//    • STEP COMPLETE (Steps 1-4) → both servos OPEN for
+//      SERVO_STEP_OPEN_MS milliseconds, then close again
+//    • PROCESS COMPLETE (Step 5 done) → both servos CLOSE
+//      and stay closed (peltiers off, chamber sealed)
+//    • EMERGENCY STOP / FAULT → both servos OPEN (safe egress)
+//
+//  Wiring (3-wire hobby servo — signal / VCC / GND):
+//    Servo 1  Signal → GPIO SERVO1_PIN   VCC → 5V   GND → GND
+//    Servo 2  Signal → GPIO SERVO2_PIN   VCC → 5V   GND → GND
+//
+//  GPIO 22 and GPIO 23 are free general-purpose outputs on the
+//  ESP32-S3-DevKitC-1 (not strapping pins, not USB, not PSRAM,
+//  not used by any other subsystem in this firmware).
+//  Change these if your board layout requires different pins.
+#define SERVO1_PIN            22   // Servo 1 PWM signal
+#define SERVO2_PIN            23   // Servo 2 PWM signal
+
+//  Servo angle definitions (degrees, standard 0–180 range).
+//  Adjust OPEN/CLOSED angles to match your physical servo
+//  mounting — swap them if the direction is reversed.
+#define SERVO_OPEN_ANGLE      90   // degrees — lid/door fully open
+#define SERVO_CLOSED_ANGLE     0   // degrees — lid/door fully closed
+
+//  How long the servo stays open on step completion (ms).
+//  After this window, the servo closes automatically.
+#define SERVO_STEP_OPEN_MS  15000  // 15 seconds
+
+//  ESP32 LEDC channel assignments for servo PWM.
+//  Must not conflict with BTS7960 LEDC channels (0/1/2 used by
+//  PeltierControl). Channels 3 and 4 are reserved here.
+#define SERVO1_LEDC_CHANNEL    3
+#define SERVO2_LEDC_CHANNEL    4
+#define SERVO_LEDC_FREQ        50   // Hz (standard hobby servo)
+#define SERVO_LEDC_RES         16   // bits → 0–65535 duty range
+
+// ============================================================
 //  TFT DISPLAY COLORS (RGB565)
 // ============================================================
 //  Industrial HMI palette — high-contrast, vivid, professional.
@@ -629,6 +714,11 @@ struct SystemStatus {
     PeltierStage testStage;
     float        testPWM;
     bool         testActive;
+
+    // Servo state
+    bool         servosOpen;          // Are both servos currently open?
+    bool         servoStepTimerActive;// Is the step-open timed window running?
+    unsigned long servoStepOpenTime;  // millis() when the step window started
 };
 
 // ============================================================

@@ -45,6 +45,8 @@
 #include "DisplayManager.h"
 #include "AudioManager.h"
 #include "SafetyManager.h"
+#include "WebManager.h"
+#include "ServoManager.h"
 
 // ============================================================
 //  TEST MODE
@@ -74,6 +76,8 @@ KeypadManager     keypadMgr;
 DisplayManager    displayMgr;
 AudioManager      audioMgr;
 SafetyManager     safetyMgr;
+WebManager        webMgr;
+ServoManager      servoMgr;
 
 // Helper to access underlying DFRobotDFPlayerMini reference for hmi_audio.h functions
 inline DFRobotDFPlayerMini& getDFPlayer() {
@@ -293,6 +297,19 @@ void setup() {
     // Safety manager
     safetyMgr.begin();
 
+    // Web dashboard telemetry (WiFi + HTTP POST, fully non-blocking to
+    // control loop — see WebManager.h). Starts connecting in background;
+    // does not delay boot even if WiFi/server unreachable.
+    Serial.println("[BOOT] Starting web dashboard telemetry...");
+    webMgr.begin();
+
+    // Servo motors — initialise and open at boot
+    Serial.println("[BOOT] Initializing servo motors...");
+    servoMgr.begin();
+    sysStatus.servosOpen          = true;
+    sysStatus.servoStepTimerActive = false;
+    sysStatus.servoStepOpenTime    = 0;
+
     // --- Boot complete ---
     Serial.println();
     Serial.println("[BOOT] ==============================");
@@ -373,12 +390,29 @@ void loop() {
 
     // --- 5. Safety checks (time-gated) ---
     if ((now - lastSafetyCheck) >= SAFETY_CHECK_INTERVAL) {
+        bool wasActive = (sysStatus.state == STATE_STEP_APPROACH ||
+                          sysStatus.state == STATE_STEP_HOLD    ||
+                          sysStatus.state == STATE_STEP5_RAMP   ||
+                          sysStatus.state == STATE_STEP_TRANSITION);
         safetyMgr.update(tempMgr, peltier, audioMgr, sysStatus);
+        // If the safety manager just transitioned us into FAULT, open servos
+        if (wasActive && sysStatus.state == STATE_FAULT) {
+            servoMgr.openServos();
+            sysStatus.servoStepTimerActive = false;
+            Serial.println("[SERVO] Opened on safety fault");
+            showScreen(SCREEN_FAULT);
+        }
         lastSafetyCheck = now;
     }
 
     // --- 6. Audio update (non-blocking) ---
     audioMgr.update();
+
+    // --- 6b. Web dashboard telemetry (non-blocking, self-paced) ---
+    webMgr.update(sysStatus);
+
+    // --- 6c. Servo update (manages timed step-open window) ---
+    servoMgr.update(sysStatus);
 
     // --- 7. Display update (time-gated) ---
     if ((now - lastDisplayUpdate) >= DISPLAY_UPDATE_INTERVAL) {
@@ -913,6 +947,10 @@ void startProcess() {
 
 void stopProcess() {
     safetyMgr.emergencyStop(peltier, audioMgr, sysStatus);
+    // Open servos on emergency stop — safe egress
+    servoMgr.openServos();
+    sysStatus.servoStepTimerActive = false;
+    Serial.println("[SERVO] Opened on emergency stop");
     showScreen(SCREEN_STOPPED);
 }
 
@@ -1014,8 +1052,11 @@ void advanceStep() {
     Serial.printf("[PROCESS] Step %d complete → advancing to Step %d\n",
                   sysStatus.currentStep, nextStep);
 
-    // Announce step complete (we reuse step start audio for simplicity)
-    // In a fuller system, you'd have separate "Step X complete" audio files.
+    // Open servos for SERVO_STEP_OPEN_MS on every step completion (Steps 1-4).
+    // The servo will auto-close after the timer expires (managed by servoMgr.update()).
+    servoMgr.startStepOpenWindow(sysStatus);
+    Serial.printf("[SERVO] Opening for %d s on step %d completion\n",
+                  SERVO_STEP_OPEN_MS / 1000, sysStatus.currentStep);
 
     if (nextStep == 5) {
         // Step 5 is special — ramp mode
@@ -1044,6 +1085,11 @@ void completeProcess() {
 
     // Fans continue running (hardwired to PSU).
     // With GPIO fan control, you'd start a cooldown timer here.
+
+    // Close servos — process finished, chamber sealed
+    servoMgr.closeServos();
+    sysStatus.servoStepTimerActive = false;
+    Serial.println("[SERVO] Closed on process complete");
 
     audioMgr.announceProcessComplete();
     showScreen(SCREEN_COMPLETE);

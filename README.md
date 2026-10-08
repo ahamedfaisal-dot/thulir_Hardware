@@ -1,6 +1,6 @@
 # TULIR — 3-Stage Cascaded Peltier Temperature Controller
 
-Production-quality firmware for ESP32-S3 driving three cascaded Peltier modules via BTS7960 H-bridge drivers with PID control, TFT HMI, keypad programming, voice announcements, and comprehensive safety. Cold-side sensing is an I2C SHT3x, which also provides a live humidity readout.
+Production-quality firmware for ESP32-S3 driving three cascaded Peltier modules via BTS7960 H-bridge drivers with PID control, TFT HMI, keypad programming, voice announcements, dual servo motors, and comprehensive safety. Cold-side sensing is an I2C SHT3x (temperature + humidity).A companion Python Flask web dashboard streams live telemetry, logs to Excel, and runs on-device ML predictions for seed viability and storage life extension.
 
 ---
 
@@ -17,6 +17,7 @@ Production-quality firmware for ESP32-S3 driving three cascaded Peltier modules 
 9. [Commissioning Procedure](#commissioning-procedure)
 10. [Troubleshooting](#troubleshooting)
 11. [Safety Notices](#safety-notices)
+12. [Web Dashboard &amp; Seed Intelligence](#web-dashboard--seed-intelligence)
 
 ---
 
@@ -65,60 +66,71 @@ Production-quality firmware for ESP32-S3 driving three cascaded Peltier modules 
 
 ### Low-Current Logic Connections (3.3V / Signal Level)
 
-| Component                | Component Pin | ESP32-S3 GPIO        | Notes                                                        |
-| ------------------------ | -------------- | --------------------- | ------------------------------------------------------------ |
-| **BTS7960 #1 (Bottom)**  | RPWM           | GPIO 4                | PWM signal                                                    |
-|                          | LPWM           | GPIO 5                | Held LOW in software (unidirectional cooling only)            |
-|                          | R_EN           | GPIO 6                | Held HIGH                                                     |
-|                          | L_EN           | GPIO 7                | Held HIGH                                                     |
-|                          | VCC            | 3.3V                  | Logic supply                                                  |
-|                          | GND            | GND                   | Common ground                                                 |
-| **BTS7960 #2 (Middle)**  | RPWM           | GPIO 8                | PWM signal                                                    |
-|                          | LPWM           | **GPIO 47**           | Held LOW in software (moved from GPIO9 to free TFT DC)        |
-|                          | R_EN           | **GPIO 48**           | Held HIGH (moved from GPIO10 to free TFT CS)                  |
-|                          | L_EN           | **3.3V** (hardwired)  | Always HIGH — wire directly to 3.3V; GPIO11 freed for TFT MOSI |
-|                          | VCC            | 3.3V                  | Logic supply                                                  |
-|                          | GND            | GND                   | Common ground                                                 |
-| **BTS7960 #3 (Top)**     | RPWM           | **GPIO 42**           | PWM signal (moved from GPIO12 to free native FSPI SCK)        |
-|                          | LPWM           | **GPIO 21**           | Held LOW in software (moved from GPIO13 to free TFT MISO)     |
-|                          | R_EN           | **GPIO 44**           | Held HIGH (moved from GPIO14 to free TFT RST)                 |
-|                          | L_EN           | GPIO 15               | Held HIGH                                                     |
-|                          | VCC            | 3.3V                  | Logic supply                                                  |
-|                          | GND            | GND                   | Common ground                                                 |
-| **SHT3x (Cold side, Temp+Humidity)** | VIN | 3.3V                  | 2.2–5.5V tolerant sensor, powered at 3.3V here                |
-|                          | GND            | GND                   |                                                                |
-|                          | SDA            | **GPIO 35**           | GPIO3 (strapping pin, broke uploads) and GPIO33 (not broken out on this board) were tried first |
-|                          | SCL            | **GPIO 36**           | Confirmed present and free on this board's actual pinout diagram |
-| **DS18B20 (Hot side, optional)** | DATA   | GPIO 43               | Not installed by default — set `HOT_SIDE_SENSOR_ENABLED true` in Config.h to use |
-|                          | VCC            | 3.3V                  |                                                                |
-|                          | GND            | GND                   |                                                                |
-| **TFT ILI9341**          | SCK            | **GPIO 12**           | Driven via `Adafruit_ILI9341` + explicit `SPIClass(FSPI)`     |
-|                          | MOSI (SDI)     | **GPIO 11**           |                                                                |
-|                          | MISO (SDO)     | **GPIO 13**           | Used for panel ID readback during bring-up diagnostics        |
-|                          | CS             | **GPIO 10**           | Chip select                                                   |
-|                          | DC             | **GPIO 9**            | Data/Command                                                  |
-|                          | RST            | **GPIO 14**           | Reset                                                         |
-|                          | VCC            | **5V**                | This module needs 5V — 3.3V leaves the onboard regulator without enough headroom to init |
-|                          | GND            | GND                   |                                                                |
-|                          | LED            | 3.3V                  | Backlight (always on)                                         |
-| **4×4 Keypad**           | ROW0           | GPIO 16               |                                                                |
-|                          | ROW1           | GPIO 17               |                                                                |
-|                          | ROW2           | GPIO 18               |                                                                |
-|                          | ROW3           | GPIO 38               | (Moved from 19 — USB)                                         |
-|                          | COL0           | GPIO 20               |                                                                |
-|                          | COL1           | GPIO 39               |                                                                |
-|                          | COL2           | GPIO 40               |                                                                |
-|                          | COL3           | GPIO 41               |                                                                |
-| **DFPlayer Mini**        | RX             | GPIO 1 (ESP TX)       | 1kΩ series resistor recommended                               |
-|                          | TX             | GPIO 2 (ESP RX)       |                                                                |
-|                          | VCC            | 5V                    |                                                                |
-|                          | GND            | GND                   |                                                                |
+| Component                                  | Component Pin | ESP32-S3 GPIO              | Notes                                                                                                                                                                     |
+| ------------------------------------------ | ------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **BTS7960 #1 (Bottom)**              | RPWM          | GPIO 4                     | PWM signal                                                                                                                                                                |
+|                                            | LPWM          | **GND** (hardwired)  | Always LOW — wire directly to GND; no GPIO used                                                                                                                          |
+|                                            | R_EN          | **3.3V** (hardwired) | Always HIGH — wire directly to 3.3V; no GPIO used                                                                                                                        |
+|                                            | L_EN          | **3.3V** (hardwired) | Always HIGH — wire directly to 3.3V; no GPIO used                                                                                                                        |
+|                                            | VCC           | 3.3V                       | Logic supply                                                                                                                                                              |
+|                                            | GND           | GND                        | Common ground                                                                                                                                                             |
+| **BTS7960 #2 (Middle)**              | RPWM          | GPIO 8                     | PWM signal                                                                                                                                                                |
+|                                            | LPWM          | **GND** (hardwired)  | Always LOW — wire directly to GND; no GPIO used                                                                                                                          |
+|                                            | R_EN          | **3.3V** (hardwired) | Always HIGH — wire directly to 3.3V; no GPIO used                                                                                                                        |
+|                                            | L_EN          | **3.3V** (hardwired) | Always HIGH — wire directly to 3.3V; no GPIO used                                                                                                                        |
+|                                            | VCC           | 3.3V                       | Logic supply                                                                                                                                                              |
+|                                            | GND           | GND                        | Common ground                                                                                                                                                             |
+| **BTS7960 #3 (Top)**                 | RPWM          | **GPIO 42**          | PWM signal (moved from GPIO12 to free native FSPI SCK)                                                                                                                    |
+|                                            | LPWM          | **GND** (hardwired)  | Always LOW — wire directly to GND; no GPIO used                                                                                                                          |
+|                                            | R_EN          | **3.3V** (hardwired) | Always HIGH — wire directly to 3.3V; no GPIO used                                                                                                                        |
+|                                            | L_EN          | **3.3V** (hardwired) | Always HIGH — wire directly to 3.3V; no GPIO used                                                                                                                        |
+|                                            | VCC           | 3.3V                       | Logic supply                                                                                                                                                              |
+|                                            | GND           | GND                        | Common ground                                                                                                                                                             |
+| **SHT3x (Cold side, Temp+Humidity)** | VIN           | 3.3V                       | 2.2–5.5V tolerant sensor, powered at 3.3V here                                                                                                                           |
+|                                            | GND           | GND                        |                                                                                                                                                                           |
+|                                            | SDA           | **GPIO 35**          | GPIO3 (strapping pin, broke uploads) and GPIO33 (not broken out on this board) were tried first                                                                           |
+|                                            | SCL           | **GPIO 36**          | Confirmed present and free on this board's actual pinout diagram                                                                                                          |
+| **DS18B20 (Hot side, optional)**     | DATA          | GPIO 37                    | Not installed by default — set`HOT_SIDE_SENSOR_ENABLED true` in Config.h to use. Moved from GPIO43 — OneWire hung the chip on that pin (ESP32-S3's default UART0 pin) |
+|                                            | VCC           | 3.3V                       |                                                                                                                                                                           |
+|                                            | GND           | GND                        |                                                                                                                                                                           |
+| **TFT ILI9341**                      | SCK           | **GPIO 12**          | Driven via`Adafruit_ILI9341` + explicit `SPIClass(FSPI)`                                                                                                              |
+|                                            | MOSI (SDI)    | **GPIO 11**          |                                                                                                                                                                           |
+|                                            | MISO (SDO)    | **GPIO 13**          | Used for panel ID readback during bring-up diagnostics                                                                                                                    |
+|                                            | CS            | **GPIO 10**          | Chip select                                                                                                                                                               |
+|                                            | DC            | **GPIO 9**           | Data/Command                                                                                                                                                              |
+|                                            | RST           | **GPIO 14**          | Reset                                                                                                                                                                     |
+|                                            | VCC           | **5V**               | This module needs 5V — 3.3V leaves the onboard regulator without enough headroom to init                                                                                 |
+|                                            | GND           | GND                        |                                                                                                                                                                           |
+|                                            | LED           | 3.3V                       | Backlight (always on)                                                                                                                                                     |
+| **4×4 Keypad**                      | ROW0          | GPIO 16                    |                                                                                                                                                                           |
+|                                            | ROW1          | GPIO 17                    |                                                                                                                                                                           |
+|                                            | ROW2          | GPIO 18                    |                                                                                                                                                                           |
+|                                            | ROW3          | GPIO 38                    | (Moved from 19 — USB)                                                                                                                                                    |
+|                                            | COL0          | GPIO 20                    |                                                                                                                                                                           |
+|                                            | COL1          | GPIO 39                    |                                                                                                                                                                           |
+|                                            | COL2          | GPIO 40                    |                                                                                                                                                                           |
+|                                            | COL3          | GPIO 41                    |                                                                                                                                                                           |
+| **DFPlayer Mini**                    | RX            | GPIO 1 (ESP TX)            | 1kΩ series resistor recommended                                                                                                                                          |
+|                                            | TX            | GPIO 2 (ESP RX)            |                                                                                                                                                                           |
+|                                            | VCC           | 5V                         |                                                                                                                                                                           |
+|                                            | GND           | GND                        |                                                                                                                                                                           |
+| **Servo 1**                          | Signal        | GPIO 22                    | LEDC ch 3, 50 Hz PWM, 500–2400 µs pulse width                                                                                                                           |
+|                                            | VCC           | **5V**               | Hobby servos (SG90/MG90S) require 5V — do**not** use 3.3V                                                                                                          |
+|                                            | GND           | GND                        |                                                                                                                                                                           |
+| **Servo 2**                          | Signal        | GPIO 23                    | LEDC ch 4, 50 Hz PWM, 500–2400 µs pulse width                                                                                                                           |
+|                                            | VCC           | **5V**               | Shared 5V rail with Servo 1                                                                                                                                               |
+|                                            | GND           | GND                        |                                                                                                                                                                           |
 
-> **GPIO 47/48/21 were tried first for TFT CS/DC/RST** (to dodge the Peltier
-> pin conflicts) but the panel never responded on those pins on this board
-> (confirmed by a register-ID read returning `0x00 0x00 0x00`). They were
-> swapped back to the proven-working 10/9/14, and the Peltier pins that used
-> to live there were relocated to 47/48/21/44 instead — see the notes above.
+> **BTS7960 LPWM / R_EN / L_EN — all three hardwired (actual build):**
+> All six enable/direction pins across the three BTS7960 boards are directly
+> wired to fixed rails — no GPIO is used for them:
+>
+> - **LPWM** → GND (always LOW, enforces unidirectional cooling)
+> - **R_EN** → 3.3V (always enabled)
+> - **L_EN** → 3.3V (always enabled)
+>   Only the three **RPWM** lines (GPIO 4, 8, 42) are controlled by the
+>   ESP32. This matches `Config.h` which has no LPWM/R_EN/L_EN `#define`s
+>   for these hardwired pins.
 
 ### High-Current Power Connections (12V)
 
@@ -186,12 +198,16 @@ See `Config.h` for the authoritative, editable pin definitions.
 - GPIO 35–37: Present on this board's header and genuinely free — the
   fact that the board omits 33/34 but keeps 35-37 confirms this module
   only needs 33/34 for PSRAM. **This firmware uses GPIO 35/36 for the
-  SHT3x's SDA/SCL.**
-- GPIO 43, 44: Default UART0 TX/RX — only reserved if your board setting uses
-  UART0 for Serial. With **USB Mode: "Hardware CDC and JTAG"** (as specified
-  below), `Serial` runs over native USB instead, so these pins are free —
-  this firmware uses GPIO 43 (hot-side sensor, optional) and GPIO 44
-  (BTS7960 #3 R_EN) safely under that board setting.
+  SHT3x's SDA/SCL, and GPIO 37 for the optional hot-side DS18B20.**
+- GPIO 43, 44: Default UART0 TX/RX. With **USB Mode: "Hardware CDC and
+  JTAG"** (as specified below), `Serial` runs over native USB instead of
+  UART0, and GPIO44 works fine as a plain GPIO output (used here for
+  BTS7960 #3 R_EN) — but **GPIO43 hung the chip when OneWire tried to
+  use it** during hot-side sensor bring-up (see `DS18B20_Test/`), likely
+  because the ESP32-S3 boot ROM itself still drives GPIO43 for its own
+  UART0 boot-log output before the app takes over, regardless of the
+  USB Mode setting. Avoid GPIO43 for anything timing-sensitive; the
+  optional hot-side sensor now uses GPIO37 instead.
 - GPIO 45: Boot strapping pin (VDD_SPI voltage select) — do not use with a
   pull-up/pull-down; pulling it high at boot can select the wrong VDD_SPI
   voltage and break flash access on some modules.
@@ -199,19 +215,46 @@ See `Config.h` for the authoritative, editable pin definitions.
   GPIO0/3/45, but not used by this firmware (freed back up when the SHT3x
   moved to GPIO35/36).
 
+**GPIO Summary for this firmware:**
+
+| GPIO | Function                    | Direction |
+| ---- | --------------------------- | --------- |
+| 1    | DFPlayer RX (ESP TX)        | Output    |
+| 2    | DFPlayer TX (ESP RX)        | Input     |
+| 4    | BTS7960#1 RPWM (Bottom PWM) | Output    |
+| 8    | BTS7960#2 RPWM (Middle PWM) | Output    |
+| 9    | TFT DC                      | Output    |
+| 10   | TFT CS                      | Output    |
+| 11   | TFT MOSI                    | Output    |
+| 12   | TFT SCK                     | Output    |
+| 13   | TFT MISO                    | Input     |
+| 14   | TFT RST                     | Output    |
+| 16   | Keypad ROW0                 | Output    |
+| 17   | Keypad ROW1                 | Output    |
+| 18   | Keypad ROW2                 | Output    |
+| 20   | Keypad COL0                 | Input     |
+| 22   | Servo 1 PWM signal          | Output    |
+| 23   | Servo 2 PWM signal          | Output    |
+| 35   | SHT3x SDA                   | I/O       |
+| 36   | SHT3x SCL                   | I/O       |
+| 38   | Keypad ROW3                 | Output    |
+| 39   | Keypad COL1                 | Input     |
+| 40   | Keypad COL2                 | Input     |
+| 41   | Keypad COL3                 | Input     |
+| 42   | BTS7960#3 RPWM (Top PWM)    | Output    |
+| 43   | DS18B20 hot-side (optional) | I/O       |
+
 **Why the TFT uses GPIO 9/10/11/12/13/14:**
+
 - These are the pins proven to actually work with this ILI9341 panel on this
   ESP32-S3 board (verified across two independent working projects, `igem`
   and `sih2026_input`, and by a register-ID readback test in this project).
-- **GPIO 11 (MOSI)**: BTS7960 #2 `MIDDLE L_EN` (always HIGH) is hardwired
-  directly to 3.3V, freeing GPIO 11.
-- **GPIO 12 (SCK)**: BTS7960 #3 `TOP RPWM` was moved to GPIO 42, freeing GPIO 12.
-- **GPIO 9 (DC), GPIO 10 (CS), GPIO 13 (MISO), GPIO 14 (RST)**: freed by
-  relocating BTS7960 #2 `LPWM`/`R_EN` to GPIO 47/48 and BTS7960 #3
-  `LPWM`/`R_EN` to GPIO 21/44.
-- GPIO 47/48/21 do **not** work reliably as TFT SPI control lines on this
-  specific board — they were tried first and gave a permanently unresponsive
-  panel, so they were freed back up for Peltier use instead.
+- **GPIO 11 (MOSI)**: BTS7960 all enable/direction pins are hardwired —
+  no GPIO needed for LPWM/R_EN/L_EN, freeing GPIO 11 for TFT MOSI.
+- **GPIO 12 (SCK)**: BTS7960 #3 `TOP RPWM` was moved to GPIO 42, freeing
+  GPIO 12 for TFT SCK.
+- **GPIO 9, 10, 13, 14 (DC/CS/MISO/RST)**: Entirely free since all BTS7960
+  enable lines are hardwired to 3.3V/GND; no GPIO pins wasted on them.
 
 ---
 
@@ -219,16 +262,16 @@ See `Config.h` for the authoritative, editable pin definitions.
 
 Install via Arduino Library Manager:
 
-| Library              | Author          | Version  | Purpose                        |
-| -------------------- | --------------- | -------- | ------------------------------ |
-| **Adafruit_ILI9341** | Adafruit        | ≥1.5    | TFT display driver             |
-| **Adafruit_GFX_Library** | Adafruit    | ≥1.11   | Graphics primitives (required by Adafruit_ILI9341) |
-| **Adafruit_SHT31_Library** | Adafruit  | ≥2.2    | Cold-side temperature + humidity sensor (I2C) |
-| **Adafruit_BusIO**   | Adafruit        | ≥1.14   | I2C/SPI transport (dependency of Adafruit_SHT31_Library) |
-| OneWire              | Paul Stoffregen | ≥2.3    | 1-Wire protocol — only needed for the optional hot-side DS18B20 |
-| DallasTemperature    | Miles Burton    | ≥3.9    | DS18B20 driver — only needed for the optional hot-side sensor |
-| Keypad               | Mark Stanley    | ≥3.1    | Matrix keypad                  |
-| DFRobotDFPlayerMini  | DFRobot         | ≥1.0.5  | Audio player                   |
+| Library                          | Author          | Version | Purpose                                                          |
+| -------------------------------- | --------------- | ------- | ---------------------------------------------------------------- |
+| **Adafruit_ILI9341**       | Adafruit        | ≥1.5   | TFT display driver                                               |
+| **Adafruit_GFX_Library**   | Adafruit        | ≥1.11  | Graphics primitives (required by Adafruit_ILI9341)               |
+| **Adafruit_SHT31_Library** | Adafruit        | ≥2.2   | Cold-side temperature + humidity sensor (I2C)                    |
+| **Adafruit_BusIO**         | Adafruit        | ≥1.14  | I2C/SPI transport (dependency of Adafruit_SHT31_Library)         |
+| OneWire                          | Paul Stoffregen | ≥2.3   | 1-Wire protocol — only needed for the optional hot-side DS18B20 |
+| DallasTemperature                | Miles Burton    | ≥3.9   | DS18B20 driver — only needed for the optional hot-side sensor   |
+| Keypad                           | Mark Stanley    | ≥3.1   | Matrix keypad                                                    |
+| DFRobotDFPlayerMini              | DFRobot         | ≥1.0.5 | Audio player                                                     |
 
 > ⚠ **Do not use TFT_eSPI for the display.** It was tried first (it's a
 > capable, widely-used library) but on this specific ESP32-S3 board this
@@ -259,22 +302,16 @@ thulir_final/
 │                           (also holds TEST_MODE, a build-time switch for
 │                           the Adafruit_ILI9341 display-only bring-up test)
 ├── Config.h              — All GPIO pins, constants, defaults, tunables
-├── PIDController.h       — PID controller class declaration
-├── PIDController.cpp     — PID algorithm (anti-windup, derivative-on-measurement)
-├── PeltierControl.h      — BTS7960 driver class declaration
-├── PeltierControl.cpp    — LEDC PWM, cascade power distribution
-├── TemperatureManager.h  — Temperature sensor class declaration
-├── TemperatureManager.cpp— SHT3x temp+humidity reads (+ optional hot-side DS18B20), filtering, validation
-├── RecipeManager.h       — Recipe storage class declaration
-├── RecipeManager.cpp     — 5-step recipe, NVS persistence
-├── KeypadManager.h       — Keypad class declaration
-├── KeypadManager.cpp     — Non-blocking scan, numeric input FSM
-├── DisplayManager.h      — TFT display class declaration
-├── DisplayManager.cpp    — ILI9341 HMI screens via Adafruit_ILI9341, selective redraw
-├── AudioManager.h        — Audio class declaration
-├── AudioManager.cpp      — DFPlayer Mini non-blocking announcements
-├── SafetyManager.h       — Safety class declaration
-├── SafetyManager.cpp     — Fault detection, emergency stop
+├── PIDController.h/cpp   — PID algorithm (anti-windup, derivative-on-measurement)
+├── PeltierControl.h/cpp  — BTS7960 driver, LEDC PWM, cascade power distribution
+├── TemperatureManager.h/cpp — SHT3x temp+humidity reads (+ optional DS18B20), filtering
+├── RecipeManager.h/cpp   — 5-step recipe, NVS persistence
+├── KeypadManager.h/cpp   — Non-blocking scan, numeric input FSM
+├── DisplayManager.h/cpp  — ILI9341 HMI screens via Adafruit_ILI9341, selective redraw
+├── AudioManager.h/cpp    — DFPlayer Mini non-blocking announcements
+├── SafetyManager.h/cpp   — Fault detection, emergency stop
+├── ServoManager.h/cpp    — Dual servo motor control (open/close on process events)
+├── WebManager.h/cpp      — WiFi telemetry (non-blocking HTTP POST)
 └── README.md             — This file
 ```
 
@@ -284,6 +321,8 @@ thulir_final/
 
 ```
 POWER ON
+   ↓
+SERVO OPEN (both servos open — boot sequence)
    ↓
 SELF TEST (sensor, display, audio)
    ↓
@@ -295,16 +334,20 @@ RECIPE SAVED (#)
    ↓
 READY (Menu → Start → Confirm)
    ↓
-SENSOR CHECK ──── FAIL ──→ FAULT SCREEN
+SENSOR CHECK ──── FAIL ──→ FAULT SCREEN → SERVO OPEN
    ↓ PASS
 STEP 1: 25°C
    ↓ approach → confirm (30s in band) → hold (timer)
+   ↓ hold complete → SERVO OPEN 15 s → auto-close
 STEP 2: 0/15/25°C
    ↓ approach → confirm → hold
+   ↓ hold complete → SERVO OPEN 15 s → auto-close
 STEP 3: 4°C
    ↓ approach → confirm → hold
+   ↓ hold complete → SERVO OPEN 15 s → auto-close
 STEP 4: 0/25°C
    ↓ approach → confirm → hold
+   ↓ hold complete → SERVO OPEN 15 s → auto-close
 STEP 5: RAMP −1°C/min
    ↓ continuous setpoint ramp
 −20°C REACHED
@@ -313,7 +356,11 @@ PROCESS COMPLETE
    ↓
 PELTIERS OFF
    ↓
+SERVO CLOSE (chamber sealed)
+   ↓
 IDLE
+
+EMERGENCY STOP / FAULT → PELTIERS OFF → SERVO OPEN (safe egress)
 ```
 
 ---
@@ -374,13 +421,13 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 
 ### Phase 1: Basic Hardware Verification
 
-| # | Step          | Procedure                                    | Expected Result                    |
-| - | ------------- | -------------------------------------------- | ---------------------------------- |
-| 1 | Test ESP32-S3 | Upload blink sketch, check Serial Monitor    | Serial output at 115200 baud       |
-| 2 | Test TFT      | Upload TULIR firmware, check for boot screen | "TULIR Initializing..." on display |
-| 3 | Test Keypad   | Press keys on HOME screen, go to Menu        | Keys register, menu navigates      |
+| # | Step          | Procedure                                    | Expected Result                                   |
+| - | ------------- | -------------------------------------------- | ------------------------------------------------- |
+| 1 | Test ESP32-S3 | Upload blink sketch, check Serial Monitor    | Serial output at 115200 baud                      |
+| 2 | Test TFT      | Upload TULIR firmware, check for boot screen | "TULIR Initializing..." on display                |
+| 3 | Test Keypad   | Press keys on HOME screen, go to Menu        | Keys register, menu navigates                     |
 | 4 | Test SHT3x    | Check boot log for sensor detection          | "SHT3x initialized" with a plausible temp/RH pair |
-| 5 | Test DFPlayer | Menu → Test → 4 (Test DFPlayer)            | "System starting" audio plays      |
+| 5 | Test DFPlayer | Menu → Test → 4 (Test DFPlayer)            | "System starting" audio plays                     |
 
 ### Phase 2: Motor Driver Verification (No Peltier Connected)
 
@@ -441,15 +488,15 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 
 ### Display Issues
 
-| Problem              | Possible Cause                              | Solution                                                                 |
-| --------------------- | -------------------------------------------- | ------------------------------------------------------------------------- |
-| No backlight at all   | Display VCC/LED not powered                  | Confirm VCC is on **5V** and LED is on 3.3V — a floating/unpowered rail gives a totally dark panel |
-| Backlight on, screen white | Panel powered but not initializing            | Verify wiring against the table above; run the `TEST_MODE 2` bring-up test in `thulir_final.ino` and check `[TEST] Display ID bytes` in Serial — `0x00 0x00 0x00` means the panel isn't responding at all |
-| Backlight on, screen black (static, never changes) | Same as above — panel at its power-up default, not receiving commands | Same as above |
-| PSRAM pin conflict    | Using GPIO 33/34 for other signals           | This board doesn't even break these out — confirmed unusable regardless. GPIO 35–37 are confirmed free and safe on this board |
-| Garbled display       | Wrong rotation                               | Change `setRotation()` in `DisplayManager::begin()`                      |
-| Wrong colors          | RGB vs BGR byte order                        | Adafruit_ILI9341 defaults to RGB; check the panel datasheet if colors look swapped |
-| Flickering            | Full redraw too often                        | Increase `DISPLAY_UPDATE_INTERVAL` in Config.h                           |
+| Problem                                                               | Possible Cause                                                                                                                                         | Solution                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| No backlight at all                                                   | Display VCC/LED not powered                                                                                                                            | Confirm VCC is on**5V** and LED is on 3.3V — a floating/unpowered rail gives a totally dark panel                                                                                                                                                                                                                                                                                                                       |
+| Backlight on, screen white                                            | Panel powered but not initializing                                                                                                                     | Verify wiring against the table above; run the`TEST_MODE 2` bring-up test in `thulir_final.ino` and check `[TEST] Display ID bytes` in Serial — `0x00 0x00 0x00` means the panel isn't responding at all                                                                                                                                                                                                              |
+| Backlight on, screen black (static, never changes)                    | Same as above — panel at its power-up default, not receiving commands                                                                                 | Same as above                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| PSRAM pin conflict                                                    | Using GPIO 33/34 for other signals                                                                                                                     | This board doesn't even break these out — confirmed unusable regardless. GPIO 35–37 are confirmed free and safe on this board                                                                                                                                                                                                                                                                                                |
+| Garbled display                                                       | Wrong rotation                                                                                                                                         | Change`setRotation()` in `DisplayManager::begin()`                                                                                                                                                                                                                                                                                                                                                                         |
+| Wrong colors                                                          | RGB vs BGR byte order                                                                                                                                  | Adafruit_ILI9341 defaults to RGB; check the panel datasheet if colors look swapped                                                                                                                                                                                                                                                                                                                                             |
+| Flickering                                                            | Full redraw too often                                                                                                                                  | Increase`DISPLAY_UPDATE_INTERVAL` in Config.h                                                                                                                                                                                                                                                                                                                                                                                |
 | Turns white whenever the 12V system is powered (even at 0% PWM, idle) | Noise/ground-bounce from the SMPS itself (not specifically PWM switching) glitching the RST line — a real hardware reset of the panel, not a code bug | Firmware now self-heals this automatically (see watchdog note below) within ~12-16s. For a permanent fix: strengthen the common ground bond between the ESP32 and the 12V/SMPS domain (single short, thick, direct wire — not a long/daisy-chained one), add a 100nF-1µF capacitor from RST to GND right at the display, route SPI/RST wiring away from the 12V wiring, and add bulk capacitance directly on the SMPS output |
 
 > This project moved from `TFT_eSPI` to `Adafruit_ILI9341` after `TFT_eSPI`
@@ -481,21 +528,21 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 
 ### Temperature / Humidity Sensor Issues (SHT3x)
 
-| Problem              | Possible Cause              | Solution                                            |
-| --------------------- | ---------------------------- | ---------------------------------------------------- |
-| "SHT3x not found"    | Bad wiring or wrong address | Check VIN/GND/SDA/SCL; confirm `SHT3X_I2C_ADDR` matches the board (0x44 default, 0x45 if ADDR pin high) |
-| Reads NaN / invalid   | I2C bus glitch or bad wiring | Check SDA/SCL continuity and pull-ups; the code already rejects NaN reads |
-| Humidity shows "RH:--" | Same I2C failure as above    | Fix the I2C connection — humidity uses the same read as temperature |
-| Noisy readings        | Electrical interference      | Keep I2C wires short and away from the 12A/6A/6A power wiring |
-| Sudden jump rejected  | Real glitch, or threshold too tight | See `TEMP_INVALID_THRESH` in Config.h if legitimate fast changes are being rejected |
+| Problem                | Possible Cause                      | Solution                                                                                                 |
+| ---------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| "SHT3x not found"      | Bad wiring or wrong address         | Check VIN/GND/SDA/SCL; confirm`SHT3X_I2C_ADDR` matches the board (0x44 default, 0x45 if ADDR pin high) |
+| Reads NaN / invalid    | I2C bus glitch or bad wiring        | Check SDA/SCL continuity and pull-ups; the code already rejects NaN reads                                |
+| Humidity shows "RH:--" | Same I2C failure as above           | Fix the I2C connection — humidity uses the same read as temperature                                     |
+| Noisy readings         | Electrical interference             | Keep I2C wires short and away from the 12A/6A/6A power wiring                                            |
+| Sudden jump rejected   | Real glitch, or threshold too tight | See`TEMP_INVALID_THRESH` in Config.h if legitimate fast changes are being rejected                     |
 
 ### Optional Hot-Side DS18B20 Issues
 
-| Problem            | Possible Cause            | Solution                                     |
-| ------------------ | ------------------------- | -------------------------------------------- |
-| "Sensor not found" | Bad wiring, or `HOT_SIDE_SENSOR_ENABLED` still false | Check DATA/VCC/GND, verify 4.7kΩ pull-up, flip the flag in Config.h |
-| Reads −127°C     | Disconnected sensor       | Check connections                             |
-| Reads 85°C        | Power-on reset value      | Sensor not initializing — check power       |
+| Problem            | Possible Cause                                        | Solution                                                             |
+| ------------------ | ----------------------------------------------------- | -------------------------------------------------------------------- |
+| "Sensor not found" | Bad wiring, or`HOT_SIDE_SENSOR_ENABLED` still false | Check DATA/VCC/GND, verify 4.7kΩ pull-up, flip the flag in Config.h |
+| Reads −127°C     | Disconnected sensor                                   | Check connections                                                    |
+| Reads 85°C        | Power-on reset value                                  | Sensor not initializing — check power                               |
 
 ### Peltier / BTS7960 Issues
 
@@ -581,6 +628,74 @@ Place these MP3 files on the microSD card in the `/mp3/` directory:
 ```
 
 File numbering matches `AudioTrack` enum in `hmi_audio.h` and `Config.h`.
+
+---
+
+## Web Dashboard & Seed Intelligence
+
+The `thulir_dashboard/` folder contains a Python Flask server that receives live telemetry from the ESP32, displays it in a browser, and runs ML-based seed viability predictions.
+
+### Quick Start
+
+```bash
+cd thulir_dashboard
+pip install -r requirements.txt
+python app.py
+# Open http://localhost:5000  (or http://<PC-LAN-IP>:5000 from any device on the same WiFi)
+```
+
+- Set `WEB_SERVER_HOST` in `Config.h` to your PC's LAN IP before flashing.
+- The ESP32 POSTs telemetry every 2 s (`WEB_POST_INTERVAL_MS`). The dashboard updates in real time via WebSocket.
+
+### Live Monitoring
+
+- **Real-time temperature chart** — Actual / Target / Active Setpoint on one chart.
+- **Peltier PWM bars** — PID demand, Bottom, Middle, Top stage outputs updated live.
+- **Process timing** — Elapsed, Remaining hold time, Device uptime.
+- **Status strip** — State, Step, Error code, Sensor validity, Ramp lag, Servo status — all live.
+- **ETA to Target** — Linear-regression estimate of time remaining to reach the current target temperature.
+- **Auto-reconnect** — Dashboard detects ESP32 dropout (no data >8 s) and shows OFFLINE; reconnects automatically.
+- **Export to Excel** — One-click download of the full telemetry log (`/api/export`).
+
+### Seed Intelligence — ML Predictions
+
+All predictions run server-side in pure Python (no ML frameworks needed).
+
+| Prediction                                     | Method                                                               | Key Insight                                                    |
+| ---------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------- |
+| **Seed Viability Score** (0–100)        | Weighted composite of temp stability + protocol adherence + humidity | Higher = better seed condition during storage                  |
+| **Germination Rate Estimate** (%)        | Viability × 0.95, penalised for temps > −10°C                     | Predicts post-storage germination success                      |
+| **Life Extension** (years + ×factor)    | **Q10 rule** — biological reaction rate halves per 10°C drop | At −20°C vs 25°C ambient: ~22× longer life                 |
+| **Temperature Stability Index** (0–100) | Rolling standard deviation → mapped score                           | 100 = rock-steady; drops sharply with oscillation              |
+| **Dew Point** (°C)                      | Magnus formula from temp + RH                                        | Flags condensation risk when dew point approaches surface temp |
+| **Process Quality Score** (0–100)       | Mean absolute PID error over rolling window                          | Measures how tightly the firmware tracks the setpoint          |
+| **Protocol Adherence** (%)               | Cumulative fraction of active ticks within ±0.5°C                  | Tracks long-term compliance with the temperature profile       |
+
+- Scores are colour-coded: **green ≥ 80**, **amber 55–79**, **red < 55**.
+- The **Predicted Viable Until** year is computed from baseline shelf life (2 yr at ambient) × Q10 extension factor.
+- All ML fields are written to the Excel log for offline analysis.
+- Standalone predictions available at `/api/predict` (JSON endpoint).
+
+### Environmental Analysis
+
+- **Condensation Risk** — LOW / MODERATE / HIGH based on dew-point margin vs surface temp.
+- **Advisory notes** — Automatic warnings if humidity > 25% or temperature above optimal storage range.
+- **Stability + Quality history chart** — Second Chart.js chart tracking both scores over the session.
+
+### Servo Motor Events (reflected on dashboard)
+
+- **OPEN** shown when both servos open (power-on, step completion, fault/stop).
+- **CLOSED** shown when servos close (process complete, 15 s step-open window expired).
+
+### API Endpoints
+
+| Endpoint         | Method | Description                       |
+| ---------------- | ------ | --------------------------------- |
+| `/`            | GET    | Live dashboard UI                 |
+| `/api/data`    | POST   | ESP32 telemetry receiver          |
+| `/api/latest`  | GET    | Last received telemetry (JSON)    |
+| `/api/predict` | GET    | Latest ML predictions only (JSON) |
+| `/api/export`  | GET    | Download full Excel log           |
 
 ---
 

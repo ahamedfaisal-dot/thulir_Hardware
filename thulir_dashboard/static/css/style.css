@@ -1,0 +1,409 @@
+:root{
+  --bg:#ffffff;
+  --panel:#ffffff;
+  --border:#dde3ea;
+  --text:#1b2733;
+  --text-muted:#5c6b7a;
+  --text-faint:#94a3b3;
+  --navy:#0f2f4f;
+  --navy-dark:#0a2038;
+  --teal:#0e7c72;
+  --amber:#b4680a;
+  --red:#b42323;
+  --bg-soft:#f7f9fb;
+  --amber-bg:#fbf0dc;
+  --teal-bg:#e2f4ec;
+  --red-bg:#fbe7e7;
+}
+
+*{box-sizing:border-box;}
+
+html,body{
+  margin:0;
+  padding:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  font-size:14px;
+}
+
+.mono{
+  font-family:ui-monospace,"SF Mono",Consolas,"Roboto Mono",monospace;
+}
+
+/* ---------------- Topbar ---------------- */
+
+.topbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:14px 28px;
+  border-bottom:1px solid var(--border);
+  background:var(--navy);
+  color:#fff;
+}
+
+.brand{display:flex; align-items:baseline; gap:10px;}
+.brand-mark{
+  font-weight:700;
+  font-size:20px;
+  letter-spacing:1.5px;
+}
+.brand-sub{
+  font-size:12px;
+  color:#c4d3e0;
+  letter-spacing:.3px;
+}
+
+.topbar-right{display:flex; align-items:center; gap:18px;}
+
+.last-update{font-size:12px; color:#b9cadb;}
+
+.conn-indicator{display:flex; align-items:center; gap:6px; font-size:12px; letter-spacing:.5px; font-weight:600;}
+.dot{width:8px; height:8px; border-radius:50%; display:inline-block;}
+.dot-online{background:#3ecf8e; box-shadow:0 0 0 3px rgba(62,207,142,.25);}
+.dot-offline{background:#e05252; box-shadow:0 0 0 3px rgba(224,82,82,.2);}
+
+.btn-export{
+  background:#fff;
+  color:var(--navy);
+  padding:7px 14px;
+  border-radius:3px;
+  text-decoration:none;
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:.3px;
+  border:1px solid transparent;
+}
+.btn-export:hover{background:#e9eef3;}
+
+/* ---------------- Layout ---------------- */
+
+.wrap{
+  max-width:1180px;
+  margin:0 auto;
+  padding:22px 28px 40px;
+}
+
+/* ---------------- Status strip ---------------- */
+
+.status-strip{
+  display:flex;
+  gap:0;
+  border:1px solid var(--border);
+  border-radius:4px;
+  background:var(--bg-soft);
+  margin-bottom:20px;
+  overflow:hidden;
+}
+.status-item{
+  flex:1;
+  padding:12px 18px;
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.status-item:last-child{border-right:none;}
+
+.label{
+  font-size:10.5px;
+  text-transform:uppercase;
+  letter-spacing:.8px;
+  color:var(--text-faint);
+  font-weight:600;
+}
+
+.value{font-size:15px; font-weight:600;}
+
+.state-badge{
+  display:inline-block;
+  padding:2px 9px;
+  border-radius:3px;
+  font-size:12px;
+  letter-spacing:.4px;
+  width:fit-content;
+}
+.state-idle{background:#eef1f4; color:#4b5a68;}
+.state-active{background:#e2f4ec; color:var(--teal);}
+.state-fault{background:#fbe7e7; color:var(--red);}
+.state-warn{background:#fbf0dc; color:var(--amber);}
+
+.tag{
+  display:inline-block;
+  padding:2px 9px;
+  border-radius:3px;
+  font-size:11.5px;
+  font-weight:600;
+  width:fit-content;
+  letter-spacing:.3px;
+}
+.tag-ok{background:#e2f4ec; color:var(--teal);}
+.tag-bad{background:#fbe7e7; color:var(--red);}
+.tag-muted{background:#eef1f4; color:var(--text-faint);}
+
+/* ---------------- Metric cards ---------------- */
+
+.metric-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:14px;
+  margin-bottom:20px;
+}
+
+.metric-card{
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:16px 18px;
+  background:var(--panel);
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+.metric-label{
+  font-size:10.5px;
+  text-transform:uppercase;
+  letter-spacing:.7px;
+  color:var(--text-faint);
+  font-weight:600;
+}
+
+.metric-value{
+  font-size:30px;
+  font-weight:600;
+  line-height:1.25;
+  color:var(--navy-dark);
+}
+.metric-value.small{font-size:22px;}
+
+.metric-unit{font-size:11px; color:var(--text-faint);}
+
+.accent-target{color:var(--amber);}
+
+/* ---------------- Panels ---------------- */
+
+.panel-row{
+  display:grid;
+  grid-template-columns:1.4fr 1fr;
+  gap:14px;
+  margin-bottom:20px;
+}
+
+.panel{
+  border:1px solid var(--border);
+  border-radius:4px;
+  background:var(--panel);
+  padding:18px 20px;
+}
+
+.panel-title{
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:.7px;
+  color:var(--text-muted);
+  margin:0 0 14px;
+  font-weight:700;
+}
+
+/* PWM bars */
+.pwm-row{
+  display:grid;
+  grid-template-columns:64px 1fr 46px;
+  align-items:center;
+  gap:10px;
+  margin-bottom:10px;
+}
+.pwm-label{font-size:12px; color:var(--text-muted); font-weight:600;}
+.pwm-track{
+  height:9px;
+  background:#eef1f4;
+  border-radius:5px;
+  overflow:hidden;
+}
+.pwm-fill{
+  height:100%;
+  border-radius:5px;
+  transition:width .3s ease;
+}
+.fill-pid{background:#5b6b7a;}
+.fill-bottom{background:var(--navy);}
+.fill-middle{background:#2f6fa0;}
+.fill-top{background:#67b3d8;}
+.pwm-val{font-size:12px; text-align:right; color:var(--text);}
+
+/* Timing */
+.timer-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-bottom:14px;
+}
+.device-info{
+  border-top:1px solid var(--border);
+  padding-top:10px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.small-muted{font-size:12px; color:var(--text-muted);}
+
+/* Footer */
+.footnote{
+  margin-top:10px;
+  font-size:11px;
+  color:var(--text-faint);
+  line-height:1.5;
+  border-top:1px solid var(--border);
+  padding-top:14px;
+}
+
+@media (max-width: 860px){
+  .metric-grid{grid-template-columns:repeat(2,1fr);}
+  .panel-row{grid-template-columns:1fr;}
+  .status-strip{flex-wrap:wrap;}
+  .status-item{flex:1 1 45%; border-bottom:1px solid var(--border);}
+}
+
+/* ======================================================
+   ML / Seed Intelligence additions
+   All colours reuse existing CSS variables — no design change.
+====================================================== */
+
+/* Section header divider */
+.section-header{
+  display:flex;
+  align-items:baseline;
+  gap:12px;
+  margin: 24px 0 14px;
+  border-top:1px solid var(--border);
+  padding-top:16px;
+}
+.section-title{
+  font-size:13px;
+  font-weight:700;
+  letter-spacing:.4px;
+  color:var(--navy);
+}
+.section-sub{
+  font-size:11.5px;
+  color:var(--text-faint);
+}
+
+/* ML metric cards — same as .metric-card, just extra bottom space */
+.ml-card{
+  padding-bottom:14px;
+}
+.ml-bar-wrap{
+  margin-top:8px;
+}
+.ml-bar-track{
+  height:7px;
+  background:#eef1f4;
+  border-radius:5px;
+  overflow:hidden;
+}
+.ml-bar-fill{
+  height:100%;
+  border-radius:5px;
+  transition:width .4s ease;
+}
+.fill-teal  { background:var(--teal); }
+.fill-mid   { background:#2f6fa0; }
+.fill-warn  { background:var(--amber); }
+.fill-navy  { background:var(--navy); }
+.fill-eta   { background:var(--teal); }
+
+/* Score color accents */
+.accent-teal{ color:var(--teal); }
+.accent-amber{ color:var(--amber); }
+.accent-red  { color:var(--red); }
+
+/* Sub-label beneath metric value */
+.ml-sub-label{
+  font-size:11px;
+  color:var(--text-faint);
+  margin-top:2px;
+}
+
+/* Tag warn */
+.tag-warn{ background:var(--amber-bg); color:var(--amber); }
+
+/* ETA block inside timing panel */
+.eta-block{
+  margin-top:14px;
+  border-top:1px solid var(--border);
+  padding-top:10px;
+}
+.eta-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+/* Environmental analysis rows */
+.env-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:12px;
+  flex-wrap:wrap;
+}
+.env-label{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.6px;
+  color:var(--text-faint);
+  font-weight:600;
+  width:140px;
+  flex-shrink:0;
+}
+.env-value{
+  font-size:15px;
+  font-weight:600;
+  color:var(--navy-dark);
+  width:80px;
+  flex-shrink:0;
+}
+.env-note{
+  font-size:11.5px;
+  color:var(--text-muted);
+  margin-top:6px;
+  line-height:1.5;
+  min-height:16px;
+}
+
+/* Seed Science panel — clean label/value rows, no icons */
+.science-table{
+  display:flex;
+  flex-direction:column;
+  gap:0;
+}
+.science-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px 0;
+  border-bottom:1px solid var(--border);
+}
+.science-row:last-child{
+  border-bottom:none;
+}
+.science-label{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.6px;
+  color:var(--text-faint);
+  font-weight:600;
+}
+.science-val{
+  font-size:14px;
+  font-weight:600;
+  color:var(--navy-dark);
+  text-align:right;
+}
+
+@media (max-width: 860px){
+  .env-label{width:110px;}
+}
+
