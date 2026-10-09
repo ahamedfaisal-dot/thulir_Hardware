@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — PID Controller
+ *  THULIR — PID Controller
  *  PIDController.h
  * ============================================================
  *  Discrete PID controller for cooling-only temperature control.

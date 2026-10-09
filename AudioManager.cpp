@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Audio Manager Implementation
+ *  THULIR — Audio Manager Implementation
  *  AudioManager.cpp
  * ============================================================
  */

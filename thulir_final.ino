@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — 3-Stage Cascaded Peltier Temperature Controller
+ *  THULIR — 3-Stage Cascaded Peltier Temperature Controller
  *  thulir_final.ino — Main Sketch
  * ============================================================
  *
@@ -130,6 +130,7 @@ void handleStoppedKey(char key);
 void handleManualPWMKey(char key);
 
 void startProcess();
+void handleWebCommand();
 void stopProcess();
 void advanceStep();
 void enterApproachState();
@@ -226,7 +227,7 @@ void setup() {
 
     Serial.println();
     Serial.println("============================================");
-    Serial.println("  TULIR — 3-Stage Peltier Controller");
+    Serial.println("  THULIR — 3-Stage Peltier Controller");
     Serial.printf("  Firmware v%s\n", FW_VERSION_STR);
     Serial.println("  ESP32-S3");
     Serial.println("============================================");
@@ -313,7 +314,7 @@ void setup() {
     // --- Boot complete ---
     Serial.println();
     Serial.println("[BOOT] ==============================");
-    Serial.println("[BOOT]  TULIR BOOT COMPLETE");
+    Serial.println("[BOOT]  THULIR BOOT COMPLETE");
     Serial.printf("[BOOT]  Sensor: %s\n", sensorOK ? "OK" : "ERROR");
     Serial.printf("[BOOT]  Audio:  %s\n", audioMgr.isAvailable() ? "OK" : "N/A");
     Serial.println("[BOOT] ==============================");
@@ -410,6 +411,9 @@ void loop() {
 
     // --- 6b. Web dashboard telemetry (non-blocking, self-paced) ---
     webMgr.update(sysStatus);
+
+    // --- 6b'. Remote command from the dashboard (START / ABORT) ---
+    handleWebCommand();
 
     // --- 6c. Servo update (manages timed step-open window) ---
     servoMgr.update(sysStatus);
@@ -902,6 +906,85 @@ void handleManualPWMKey(char key) {
         sysStatus.state = STATE_IDLE;
         showScreen(SCREEN_MENU);
     }
+}
+
+// ============================================================
+//  REMOTE COMMANDS FROM THE WEB DASHBOARD
+// ============================================================
+//  Commands are executed through the same functions the keypad uses, so every
+//  existing validation and safety check still applies. The outcome is reported
+//  back through webMgr.setAck() (sent in the next telemetry packet).
+//    start : only from IDLE/READY on the HOME screen with no numeric entry in
+//            progress. The recipe (hold minutes + step 2/4 temperatures) is
+//            range-checked, applied in RAM only (the recipe saved in NVS is
+//            NOT overwritten), then startProcess() runs recipe validation and
+//            the pre-start safety check.
+//    abort : same emergency-stop path as the keypad stop (also opens servos).
+//  Pause/resume are not supported by this firmware.
+void handleWebCommand() {
+    WebCommand cmd;
+    if (!webMgr.takeCommand(cmd)) return;
+
+    if (!WEB_REMOTE_CONTROL_ENABLED) {
+        webMgr.setAck(cmd.id, false, "remote control disabled");
+        return;
+    }
+
+    const bool active = (sysStatus.state == STATE_STEP_APPROACH ||
+                         sysStatus.state == STATE_STEP_HOLD ||
+                         sysStatus.state == STATE_STEP_TRANSITION ||
+                         sysStatus.state == STATE_STEP5_RAMP);
+
+    if (strcmp(cmd.name, "abort") == 0) {
+        if (!active) {
+            webMgr.setAck(cmd.id, false, "no active process");
+            return;
+        }
+        Serial.println("[WEB] Remote ABORT");
+        stopProcess();
+        webMgr.setAck(cmd.id, true, "stopped");
+        return;
+    }
+
+    if (strcmp(cmd.name, "start") == 0) {
+        if (sysStatus.state != STATE_IDLE && sysStatus.state != STATE_READY) {
+            webMgr.setAck(cmd.id, false, "device not idle");
+            return;
+        }
+        if (sysStatus.currentScreen != SCREEN_HOME || keypadMgr.getNumericInput().active) {
+            webMgr.setAck(cmd.id, false, "operator busy at keypad");
+            return;
+        }
+        if (!cmd.hasRecipe) {
+            webMgr.setAck(cmd.id, false, "no recipe in command");
+            return;
+        }
+        for (uint8_t i = 0; i < 4; i++) {
+            if (cmd.hold[i] < 1 || cmd.hold[i] > 999) {
+                webMgr.setAck(cmd.id, false, "hold time out of range");
+                return;
+            }
+        }
+        const bool t2ok = (cmd.t2 == 0.0f || cmd.t2 == 15.0f || cmd.t2 == 25.0f);
+        const bool t4ok = (cmd.t4 == 0.0f || cmd.t4 == 25.0f);
+        if (!t2ok || !t4ok) {
+            webMgr.setAck(cmd.id, false, "step temperature not allowed");
+            return;
+        }
+        for (uint8_t i = 0; i < 4; i++) recipeMgr.setStepHoldTime(i + 1, cmd.hold[i]);
+        recipeMgr.setStep2Temp(cmd.t2);
+        recipeMgr.setStep4Temp(cmd.t4);
+        Serial.println("[WEB] Remote START with dashboard recipe");
+        startProcess();
+        if (sysStatus.state == STATE_STEP_APPROACH) {
+            webMgr.setAck(cmd.id, true, "started");
+        } else {
+            webMgr.setAck(cmd.id, false, "start refused by safety or recipe check");
+        }
+        return;
+    }
+
+    webMgr.setAck(cmd.id, false, "unsupported command");
 }
 
 // ============================================================

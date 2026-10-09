@@ -3,7 +3,7 @@
  *  DS18B20_Test.ino
  * ============================================================
  *  Standalone sketch to verify a waterproof DS18B20 sensor
- *  (e.g. the optional hot-side sensor for TULIR, DS18B20_HOT_PIN)
+ *  (e.g. the optional hot-side sensor for THULIR, DS18B20_HOT_PIN)
  *  BEFORE wiring it into the main thulir_final firmware.
  *
  *  Wiring (DS18B20, 3-wire waterproof probe):
@@ -12,7 +12,7 @@
  *    Yellow -> DATA -> DS18B20_PIN below, with a 4.7kOhm pull-up
  *              resistor from DATA to 3.3V
  *
- *  Default pin is GPIO37 -- moved here from GPIO43 (TULIR's original
+ *  Default pin is GPIO37 -- moved here from GPIO43 (THULIR's original
  *  DS18B20_HOT_PIN) after GPIO43 hung the chip when touched by OneWire
  *  on this board (GPIO43/44 are the ESP32-S3's default UART0 pins,
  *  which the boot ROM also drives). GPIO37 is genuinely free: not a

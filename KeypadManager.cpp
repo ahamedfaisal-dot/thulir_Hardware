@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Keypad Manager Implementation
+ *  THULIR — Keypad Manager Implementation
  *  KeypadManager.cpp
  * ============================================================
  */

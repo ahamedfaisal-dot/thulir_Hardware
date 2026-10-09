@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Temperature Manager Implementation
+ *  THULIR — Temperature Manager Implementation
  *  TemperatureManager.cpp
  * ============================================================
  */

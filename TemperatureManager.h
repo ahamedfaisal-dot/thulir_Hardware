@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Temperature Manager
+ *  THULIR — Temperature Manager
  *  TemperatureManager.h
  * ============================================================
  *  Manages the cold-side SHT3x (I2C temperature + humidity) sensor:

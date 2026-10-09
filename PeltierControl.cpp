@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Peltier Control Implementation
+ *  THULIR — Peltier Control Implementation
  *  PeltierControl.cpp
  * ============================================================
  *  Uses ESP32 LEDC peripheral for hardware PWM generation.

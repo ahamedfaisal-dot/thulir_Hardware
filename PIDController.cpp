@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — PID Controller Implementation
+ *  THULIR — PID Controller Implementation
  *  PIDController.cpp
  * ============================================================
  *

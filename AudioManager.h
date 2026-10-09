@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Audio Manager
+ *  THULIR — Audio Manager
  *  AudioManager.h
  * ============================================================
  *  Non-blocking DFPlayer Mini voice announcement system.

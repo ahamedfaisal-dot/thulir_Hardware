@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — 3-Stage Cascaded Peltier Temperature Controller
+ *  THULIR — 3-Stage Cascaded Peltier Temperature Controller
  *  ServoManager.cpp — Dual Servo Motor Control Implementation
  * ============================================================
  *

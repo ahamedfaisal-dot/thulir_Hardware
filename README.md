@@ -1,4 +1,4 @@
-# TULIR — 3-Stage Cascaded Peltier Temperature Controller
+# THULIR — 3-Stage Cascaded Peltier Temperature Controller
 
 Production-quality firmware for ESP32-S3 driving three cascaded Peltier modules via BTS7960 H-bridge drivers with PID control, TFT HMI, keypad programming, voice announcements, dual servo motors, and comprehensive safety. Cold-side sensing is an I2C SHT3x (temperature + humidity).A companion Python Flask web dashboard streams live telemetry, logs to Excel, and runs on-device ML predictions for seed viability and storage life extension.
 
@@ -424,7 +424,7 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 | # | Step          | Procedure                                    | Expected Result                                   |
 | - | ------------- | -------------------------------------------- | ------------------------------------------------- |
 | 1 | Test ESP32-S3 | Upload blink sketch, check Serial Monitor    | Serial output at 115200 baud                      |
-| 2 | Test TFT      | Upload TULIR firmware, check for boot screen | "TULIR Initializing..." on display                |
+| 2 | Test TFT      | Upload THULIR firmware, check for boot screen | "THULIR Initializing..." on display                |
 | 3 | Test Keypad   | Press keys on HOME screen, go to Menu        | Keys register, menu navigates                     |
 | 4 | Test SHT3x    | Check boot log for sensor detection          | "SHT3x initialized" with a plausible temp/RH pair |
 | 5 | Test DFPlayer | Menu → Test → 4 (Test DFPlayer)            | "System starting" audio plays                     |
@@ -649,13 +649,15 @@ python app.py
 
 ### Live Monitoring
 
-- **Real-time temperature chart** — Actual / Target / Active Setpoint on one chart.
+- **Pages** — Home, Run Monitor, Protocols, Run History, User Guide, Settings (CryoAxis / THULIR theme).
+- **Remote control** — START (sends the protocol recipe) and ABORT from the dashboard; the device acknowledges every command (see `thulir_dashboard/README.md`). Disable with `WEB_REMOTE_CONTROL_ENABLED` in `Config.h`.
+- **Real-time temperature chart** — Actual vs the planned protocol profile with tolerance band.
 - **Peltier PWM bars** — PID demand, Bottom, Middle, Top stage outputs updated live.
 - **Process timing** — Elapsed, Remaining hold time, Device uptime.
 - **Status strip** — State, Step, Error code, Sensor validity, Ramp lag, Servo status — all live.
 - **ETA to Target** — Linear-regression estimate of time remaining to reach the current target temperature.
-- **Auto-reconnect** — Dashboard detects ESP32 dropout (no data >8 s) and shows OFFLINE; reconnects automatically.
-- **Export to Excel** — One-click download of the full telemetry log (`/api/export`).
+- **Auto-reconnect** — Dashboard detects ESP32 dropout (no data >10 s, configurable) and shows OFFLINE; reconnects automatically.
+- **Run logging & Excel export** — Every run (measurements, events, alerts) is stored in SQLite and exportable per run.
 
 ### Seed Intelligence — ML Predictions
 
@@ -673,7 +675,7 @@ All predictions run server-side in pure Python (no ML frameworks needed).
 
 - Scores are colour-coded: **green ≥ 80**, **amber 55–79**, **red < 55**.
 - The **Predicted Viable Until** year is computed from baseline shelf life (2 yr at ambient) × Q10 extension factor.
-- All ML fields are written to the Excel log for offline analysis.
+- ML values are shown on the Run Monitor page and available at `/api/predict`.
 - Standalone predictions available at `/api/predict` (JSON endpoint).
 
 ### Environmental Analysis
@@ -695,11 +697,14 @@ All predictions run server-side in pure Python (no ML frameworks needed).
 | `/api/data`    | POST   | ESP32 telemetry receiver          |
 | `/api/latest`  | GET    | Last received telemetry (JSON)    |
 | `/api/predict` | GET    | Latest ML predictions only (JSON) |
-| `/api/export`  | GET    | Download full Excel log           |
+| `/api/export`  | GET    | Excel export of the latest run    |
+| `/api/runs`, `/api/runs/<id>/export` | GET | Run history / per-run Excel |
+| `/api/protocols` | GET/POST/PUT/DELETE | Protocol management |
+| `/api/command` | POST   | Queue START / ABORT for the device |
 
 ---
 
 ## License
 
-This firmware is provided as-is for the TULIR project.
+This firmware is provided as-is for the THULIR project.
 Use at your own risk. Always follow proper electrical and thermal safety practices.

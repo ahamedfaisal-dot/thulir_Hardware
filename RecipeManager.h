@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Recipe Manager
+ *  THULIR — Recipe Manager
  *  RecipeManager.h
  * ============================================================
  *  Manages the 5-step temperature profile recipe:

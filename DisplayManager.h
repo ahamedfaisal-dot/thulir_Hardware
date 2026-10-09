@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Display Manager
+ *  THULIR — Display Manager
  *  DisplayManager.h
  * ============================================================
  *  Industrial HMI on 2.8" ILI9341 TFT (320×240, landscape).

@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Safety Manager
+ *  THULIR — Safety Manager
  *  SafetyManager.h
  * ============================================================
  *  Continuous safety monitoring:

@@ -3,254 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TULIR Process Monitor</title>
+<title>CryoAxis – THULIR Process Monitor</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
 
 <header class="topbar">
   <div class="brand">
-    <span class="brand-mark">TULIR</span>
-    <span class="brand-sub">CryoSeed Process Monitor</span>
+    <span class="brand-name">CryoAxis</span>
+    <span class="brand-sub">THULIR Process Monitor</span>
+  </div>
+  <div class="topbar-logos">
+    <span class="logo-chip"><img src="{{ url_for('static', filename='img/thulir_logo.png') }}" alt="THULIR – REC-Chennai"></span>
+    <span class="logo-chip"><img src="/bg_image/rec_logo.png" alt="Rajalakshmi Engineering College"></span>
   </div>
   <div class="topbar-right">
-    <span id="lastUpdate" class="last-update">No data yet</span>
-    <div class="conn-indicator">
-      <span id="connDot" class="dot dot-offline"></span>
-      <span id="connLabel">OFFLINE</span>
+    <div class="conn" title="Hardware telemetry connection">
+      <span id="connDot" class="dot off"></span><span id="connLabel">NO DEVICE</span>
     </div>
-    <a href="/api/export" class="btn-export">Export Excel</a>
+    <div class="clock"><div class="d" id="clockDate"></div><div class="t" id="clockTime"></div></div>
   </div>
 </header>
 
-<main class="wrap">
+<div class="shell">
+  <nav class="sidebar" id="nav"></nav>
+  <main class="main">
+    <div id="view"></div>
+    <footer class="footer">
+      <div class="slogan">Built with science, driven by conservation, and made for those who protect what grows.</div>
+      <div class="team">– iGEM Team REC-CHENNAI ❤️</div>
+    </footer>
+  </main>
+</div>
 
-  <!-- ── Status Strip ── -->
-  <section class="status-strip">
-    <div class="status-item">
-      <span class="label">State</span>
-      <span id="stState" class="value state-badge state-idle">IDLE</span>
-    </div>
-    <div class="status-item">
-      <span class="label">Step</span>
-      <span id="stStep" class="value mono">0 / 5</span>
-    </div>
-    <div class="status-item">
-      <span class="label">Error</span>
-      <span id="stError" class="value mono">NONE</span>
-    </div>
-    <div class="status-item">
-      <span class="label">Sensor</span>
-      <span id="stSensor" class="value tag tag-ok">VALID</span>
-    </div>
-    <div class="status-item">
-      <span class="label">Ramp Lag</span>
-      <span id="stRampLag" class="value tag tag-muted">N/A</span>
-    </div>
-    <div class="status-item">
-      <span class="label">Servos</span>
-      <span id="stServos" class="value tag tag-muted">—</span>
-    </div>
-  </section>
-
-  <!-- ── Primary Metric Cards ── -->
-  <section class="metric-grid">
-    <div class="metric-card">
-      <span class="metric-label">Actual Temperature</span>
-      <span id="mActual" class="metric-value mono">&mdash;</span>
-      <span class="metric-unit">&deg;C</span>
-    </div>
-    <div class="metric-card">
-      <span class="metric-label">Target Temperature</span>
-      <span id="mTarget" class="metric-value mono accent-target">&mdash;</span>
-      <span class="metric-unit">&deg;C</span>
-    </div>
-    <div class="metric-card">
-      <span class="metric-label">Active Setpoint</span>
-      <span id="mSetpoint" class="metric-value mono">&mdash;</span>
-      <span class="metric-unit">&deg;C</span>
-    </div>
-    <div class="metric-card">
-      <span class="metric-label">Relative Humidity</span>
-      <span id="mHumidity" class="metric-value mono">&mdash;</span>
-      <span class="metric-unit">%RH</span>
-    </div>
-  </section>
-
-  <!-- ── PWM + Timing ── -->
-  <section class="panel-row">
-    <div class="panel">
-      <h2 class="panel-title">Peltier Stage Output</h2>
-      <div class="pwm-row">
-        <span class="pwm-label">PID Demand</span>
-        <div class="pwm-track"><div id="barPID" class="pwm-fill fill-pid" style="width:0%"></div></div>
-        <span id="valPID" class="pwm-val mono">0%</span>
-      </div>
-      <div class="pwm-row">
-        <span class="pwm-label">Bottom</span>
-        <div class="pwm-track"><div id="barBottom" class="pwm-fill fill-bottom" style="width:0%"></div></div>
-        <span id="valBottom" class="pwm-val mono">0%</span>
-      </div>
-      <div class="pwm-row">
-        <span class="pwm-label">Middle</span>
-        <div class="pwm-track"><div id="barMiddle" class="pwm-fill fill-middle" style="width:0%"></div></div>
-        <span id="valMiddle" class="pwm-val mono">0%</span>
-      </div>
-      <div class="pwm-row">
-        <span class="pwm-label">Top</span>
-        <div class="pwm-track"><div id="barTop" class="pwm-fill fill-top" style="width:0%"></div></div>
-        <span id="valTop" class="pwm-val mono">0%</span>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2 class="panel-title">Process Timing</h2>
-      <div class="timer-grid">
-        <div>
-          <span class="metric-label">Elapsed</span>
-          <span id="tElapsed" class="metric-value mono small">00:00</span>
-        </div>
-        <div>
-          <span class="metric-label">Remaining</span>
-          <span id="tRemaining" class="metric-value mono small">00:00</span>
-        </div>
-      </div>
-      <div class="device-info">
-        <span class="metric-label">Device Uptime</span>
-        <span id="tUptime" class="mono small-muted">&mdash;</span>
-      </div>
-      <!-- ETA bar -->
-      <div class="eta-block">
-        <div class="eta-header">
-          <span class="metric-label">ETA to Target</span>
-          <span id="etaVal" class="mono small-muted">—</span>
-        </div>
-        <div class="pwm-track" style="margin-top:6px">
-          <div id="etaBar" class="pwm-fill fill-eta" style="width:0%"></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── Temperature Trend Chart ── -->
-  <section class="panel" style="margin-bottom:20px">
-    <h2 class="panel-title">Temperature Trend</h2>
-    <canvas id="tempChart" height="90"></canvas>
-  </section>
-
-  <!-- ════════════════════════════════════════════════════════════
-       SEED INTELLIGENCE — ML Prediction Section
-  ════════════════════════════════════════════════════════════ -->
-  <div class="section-header">
-    <span class="section-title">Seed Intelligence</span>
-    <span class="section-sub">Predictive analytics based on live cryogenic telemetry</span>
-  </div>
-
-  <!-- ── ML Primary Metric Cards ── -->
-  <section class="metric-grid" style="margin-bottom:20px">
-    <div class="metric-card ml-card">
-      <span class="metric-label">Seed Viability Score</span>
-      <span id="mlViability" class="metric-value mono accent-teal">&mdash;</span>
-      <span class="metric-unit">/ 100</span>
-      <div class="ml-bar-wrap">
-        <div class="ml-bar-track">
-          <div id="mlViabilityBar" class="ml-bar-fill fill-teal" style="width:0%"></div>
-        </div>
-      </div>
-    </div>
-    <div class="metric-card ml-card">
-      <span class="metric-label">Germination Rate (Est.)</span>
-      <span id="mlGerm" class="metric-value mono accent-teal">&mdash;</span>
-      <span class="metric-unit">%</span>
-      <div class="ml-bar-wrap">
-        <div class="ml-bar-track">
-          <div id="mlGermBar" class="ml-bar-fill fill-teal" style="width:0%"></div>
-        </div>
-      </div>
-    </div>
-    <div class="metric-card ml-card">
-      <span class="metric-label">Life Extension</span>
-      <span id="mlLifeYears" class="metric-value mono accent-amber">&mdash;</span>
-      <span class="metric-unit">extra years vs ambient</span>
-      <span id="mlLifeFactor" class="ml-sub-label">&mdash;&times; storage factor</span>
-    </div>
-    <div class="metric-card ml-card">
-      <span class="metric-label">Process Quality Score</span>
-      <span id="mlQuality" class="metric-value mono">&mdash;</span>
-      <span class="metric-unit">/ 100</span>
-      <div class="ml-bar-wrap">
-        <div class="ml-bar-track">
-          <div id="mlQualityBar" class="ml-bar-fill fill-navy" style="width:0%"></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── Environmental Analysis + Protocol Adherence ── -->
-  <section class="panel-row" style="margin-bottom:20px">
-    <div class="panel">
-      <h2 class="panel-title">Environmental Analysis</h2>
-
-      <div class="env-row">
-        <span class="env-label">Dew Point</span>
-        <span id="envDewPoint" class="env-value mono">&mdash; &deg;C</span>
-        <span id="envDewStatus" class="tag tag-muted" style="margin-left:8px">—</span>
-      </div>
-      <div class="env-row">
-        <span class="env-label">Temp Stability Index</span>
-        <span id="envStability" class="env-value mono">&mdash;</span>
-        <div class="pwm-track" style="flex:1;margin:0 10px">
-          <div id="envStabilityBar" class="pwm-fill fill-teal" style="width:0%"></div>
-        </div>
-      </div>
-      <div class="env-row">
-        <span class="env-label">Protocol Adherence</span>
-        <span id="envAdherence" class="env-value mono">&mdash;</span>
-        <div class="pwm-track" style="flex:1;margin:0 10px">
-          <div id="envAdherenceBar" class="pwm-fill fill-navy" style="width:0%"></div>
-        </div>
-      </div>
-      <div class="env-note" id="envNote"></div>
-    </div>
-
-    <div class="panel">
-      <h2 class="panel-title">Seed Storage Science</h2>
-      <div class="science-table">
-        <div class="science-row">
-          <span class="science-label">Current Avg Temp</span>
-          <span id="sciAvgTemp" class="science-val mono">&mdash;</span>
-        </div>
-        <div class="science-row">
-          <span class="science-label">Q10 Rule Factor</span>
-          <span id="sciQ10" class="science-val mono">&mdash;</span>
-        </div>
-        <div class="science-row">
-          <span class="science-label">Condensation Risk</span>
-          <span id="sciCondRisk" class="science-val">&mdash;</span>
-        </div>
-        <div class="science-row">
-          <span class="science-label">Predicted Viable Until</span>
-          <span id="sciViableUntil" class="science-val mono">&mdash;</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── Stability + PID quality mini-chart ── -->
-  <section class="panel" style="margin-bottom:20px">
-    <h2 class="panel-title">PID Tracking &amp; Stability History</h2>
-    <canvas id="stabilityChart" height="70"></canvas>
-  </section>
-
-  <footer class="footnote">
-    TULIR &mdash; 3-Stage Cascaded Peltier Cryogenic Controller &amp; Seed Longevity System.
-    Telemetry logged to Excel every reading.
-    Seed intelligence predictions use the Q10 rule (biological reaction kinetics), Magnus dew-point formula,
-    and rolling statistical models computed server-side from live sensor data.
-    Predictions are estimates &mdash; not a substitute for laboratory viability testing.
-  </footer>
-
-</main>
+<div id="toasts"></div>
+<div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.5/dist/socket.io.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>

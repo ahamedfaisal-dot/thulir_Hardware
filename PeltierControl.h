@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Peltier Control (BTS7960 PWM Driver)
+ *  THULIR — Peltier Control (BTS7960 PWM Driver)
  *  PeltierControl.h
  * ============================================================
  *  Manages three BTS7960 H-bridge modules driving the cascaded

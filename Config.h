@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — 3-Stage Cascaded Peltier Temperature Controller
+ *  THULIR — 3-Stage Cascaded Peltier Temperature Controller
  *  Config.h — Master Configuration
  * ============================================================
  *
@@ -70,7 +70,7 @@
 #define FW_VERSION_MINOR  0
 #define FW_VERSION_PATCH  0
 #define FW_VERSION_STR    "1.0.0"
-#define FW_NAME           "TULIR"
+#define FW_NAME           "THULIR"
 
 // ============================================================
 //  FEATURE FLAGS
@@ -104,6 +104,14 @@
 
 #define WEB_POST_INTERVAL_MS   2000    // How often to POST telemetry
 #define WEB_WIFI_RETRY_MS      10000   // Retry WiFi connect if dropped
+
+// Remote control from the dashboard (START with a recipe / ABORT).
+// The server sends a command in the reply to a telemetry POST; the device
+// executes it through the SAME paths as the keypad (startProcess() with its
+// recipe + pre-start safety checks, stopProcess() emergency stop) and reports
+// an acknowledgement in its next telemetry packet. Set false to make the
+// device refuse every remote command (telemetry stays active).
+#define WEB_REMOTE_CONTROL_ENABLED true
 
 // Cold-side sanity ceiling — catches a cold-side reading that's gone
 // implausibly high (e.g. heatsink/airflow failure feeding back into the
@@ -497,21 +505,21 @@
 //  TFT DISPLAY COLORS (RGB565)
 // ============================================================
 //  Industrial HMI palette — high-contrast, vivid, professional.
-#define COLOR_BG               0x0000  // Pure black (maximum TFT contrast)
-#define COLOR_HEADER_BG        0x01E8  // Deep navy header bar
-#define COLOR_TEXT_PRIMARY     0xFFFF  // Pure White
-#define COLOR_TEXT_SECONDARY   0xCE79  // Bright Silver Gray
-#define COLOR_TEXT_DIM         0x9CD3  // Clear Light Gray
-#define COLOR_TEMP_ACTUAL      0x07FF  // Vibrant Cyan
-#define COLOR_TEMP_TARGET      0xFD20  // Amber Orange
-#define COLOR_STATUS_OK        0x07E0  // Bright Neon Green
-#define COLOR_STATUS_WARN      0xFFE0  // Bright Yellow
-#define COLOR_STATUS_ERR       0xF800  // Bright Red
-#define COLOR_BAR_FILL         0x07FF  // Vibrant Cyan
-#define COLOR_BAR_BG           0x2124  // Distinct dark card gray
-#define COLOR_DIVIDER          0x31A6  // Crisp visible separator line
-#define COLOR_HIGHLIGHT        0x03FF  // Vibrant Cyan highlight
-#define COLOR_MENU_SEL_BG      0x01E8  // Dark navy selection bg
+#define COLOR_BG               0x0944  // Deep forest green (dashboard header tone, darkened for TFT contrast) #0E2B22
+#define COLOR_HEADER_BG        0x1247  // Dashboard header green #174A3A
+#define COLOR_TEXT_PRIMARY     0xFFFF  // White #FFFFFF
+#define COLOR_TEXT_SECONDARY   0xDF5C  // Pale green-white (dashboard card border) #DDE9E3
+#define COLOR_TEXT_DIM         0x8D74  // Muted sage #8FAEA1
+#define COLOR_TEMP_ACTUAL      0x4DB6  // Dashboard actual-temperature teal #4FB6B2
+#define COLOR_TEMP_TARGET      0xBF3A  // Light mint (target line; dashboard dark green is unreadable on a dark TFT) #BFE6D1
+#define COLOR_STATUS_OK        0x5E31  // Bright green (dashboard success #3E8B63, lightened for contrast) #5CC48A
+#define COLOR_STATUS_WARN      0xDCC6  // Dashboard warning amber #D99A35
+#define COLOR_STATUS_ERR       0xE32C  // Dashboard error red (lightened for contrast) #E06666
+#define COLOR_BAR_FILL         0x4DB6  // Dashboard progress-bar teal #4FB6B2
+#define COLOR_BAR_BG           0x1A26  // Dark green bar track #1D4437
+#define COLOR_DIVIDER          0x2B0A  // Green separator line #2E6350
+#define COLOR_HIGHLIGHT        0x4DB6  // Dashboard active/selected teal #4FB6B2
+#define COLOR_MENU_SEL_BG      0x1247  // Dashboard header green selection bg #174A3A
 
 // ============================================================
 //  DFPLAYER AUDIO FILE MAP
@@ -542,7 +550,7 @@
 // ============================================================
 //  NVS STORAGE KEYS
 // ============================================================
-#define NVS_NAMESPACE          "tulir"
+#define NVS_NAMESPACE          "thulir"
 #define NVS_KEY_S1_TIME        "s1_time"
 #define NVS_KEY_S2_TEMP        "s2_temp"
 #define NVS_KEY_S2_TIME        "s2_time"

@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Recipe Manager Implementation
+ *  THULIR — Recipe Manager Implementation
  *  RecipeManager.cpp
  * ============================================================
  */

@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Display Manager Implementation
+ *  THULIR — Display Manager Implementation
  *  DisplayManager.cpp
  * ============================================================
  *  Industrial HMI for ILI9341 320×240 TFT (landscape).
@@ -57,7 +57,7 @@ bool DisplayManager::begin(bool showSplash) {
         // Splash screen — skipped on a silent watchdog recovery re-init
         // so the live dashboard doesn't disappear for over a second
         // every time the display glitches back to life.
-        drawCenteredText(95, "TULIR", COLOR_TEXT_PRIMARY, 3);
+        drawCenteredText(95, "THULIR", COLOR_TEXT_PRIMARY, 3);
         drawCenteredText(135, "3-Stage Peltier Controller", COLOR_TEMP_ACTUAL, 1);
         drawCenteredText(160, "Initializing...", COLOR_TEXT_SECONDARY, 1);
         delay(1200);  // Hold splash screen so user sees boot progress
@@ -148,7 +148,7 @@ void DisplayManager::drawScreen(ScreenID screen, const SystemStatus& status,
 /*
  *  Layout (320×240 landscape):
  *  ┌──────────────────────────────────┐
- *  │  TULIR                    IDLE   │ Y=0-22    Header
+ *  │  THULIR                    IDLE   │ Y=0-22    Header
  *  ├──────────────────────────────────┤
  *  │  ACTUAL          TARGET          │ Y=24-30   Labels
  *  │   25.3°C          25.0°C         │ Y=32-56   Big values
@@ -962,7 +962,7 @@ void DisplayManager::drawAboutScreen() {
     drawHeader();
     drawDivider(22);
 
-    drawCenteredText(40, "TULIR", COLOR_TEMP_ACTUAL, 3);
+    drawCenteredText(40, "THULIR", COLOR_TEMP_ACTUAL, 3);
     drawCenteredText(70, "3-Stage Peltier Controller", COLOR_TEXT_SECONDARY, 1);
 
     drawDivider(85);
@@ -1200,7 +1200,7 @@ void DisplayManager::drawHeader() {
     _tft->setTextSize(2);
     _tft->setTextColor(COLOR_TEXT_PRIMARY, COLOR_HEADER_BG);
     _tft->setCursor(6, 3);
-    _tft->print("TULIR");
+    _tft->print("THULIR");
 }
 
 void DisplayManager::drawDivider(int y) {

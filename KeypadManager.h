@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Keypad Manager
+ *  THULIR — Keypad Manager
  *  KeypadManager.h
  * ============================================================
  *  Non-blocking 4×4 matrix keypad scanning with input state

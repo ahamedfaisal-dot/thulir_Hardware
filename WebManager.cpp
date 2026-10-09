@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  TULIR — Web Dashboard Telemetry Manager Implementation
+ *  THULIR — Web Dashboard Telemetry Manager Implementation
  *  WebManager.cpp
  * ============================================================
  */
@@ -13,7 +13,89 @@ WebManager::WebManager()
     : _lastPostTime(0)
     , _lastWifiAttempt(0)
     , _wifiStarted(false)
+    , _hasPending(false)
+    , _lastCmdId(0)
+    , _ackId(0)
+    , _ackOk(false)
 {
+    memset(&_pending, 0, sizeof(_pending));
+    _ackMsg[0] = '\0';
+}
+
+// ------------------------------------------------------------
+//  Tiny JSON helpers for the (server-generated, compact) reply.
+//  No JSON library: the server emits  "cmd":{"id":N,"name":"start",
+//  "h":[a,b,c,d],"t2":X,"t4":Y}  and nothing else is trusted.
+// ------------------------------------------------------------
+static bool jsonNum(const char* s, const char* key, double& out) {
+    char pat[16];
+    snprintf(pat, sizeof(pat), "\"%s\":", key);
+    const char* p = strstr(s, pat);
+    if (!p) return false;
+    p += strlen(pat);
+    char* end = nullptr;
+    out = strtod(p, &end);
+    return end != p;
+}
+
+void WebManager::parseCommand(const char* body) {
+    const char* c = strstr(body, "\"cmd\":{");
+    if (!c) return;
+    double id = 0;
+    if (!jsonNum(c, "id", id) || id < 1) return;
+    uint32_t cid = (uint32_t)id;
+    if (cid == _lastCmdId || _hasPending) return;   // already seen / busy
+
+    WebCommand cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.id = cid;
+    const char* n = strstr(c, "\"name\":\"");
+    if (!n) return;
+    n += 8;
+    size_t i = 0;
+    while (*n && *n != '"' && i < sizeof(cmd.name) - 1) cmd.name[i++] = *n++;
+    cmd.name[i] = '\0';
+
+    const char* h = strstr(c, "\"h\":[");
+    if (h) {
+        h += 5;
+        uint8_t k = 0;
+        bool ok = true;
+        for (; k < 4; k++) {
+            char* end = nullptr;
+            long v = strtol(h, &end, 10);
+            if (end == h || v < 0 || v > 65535) { ok = false; break; }
+            cmd.hold[k] = (uint16_t)v;
+            h = end;
+            if (*h == ',') h++;
+        }
+        double t2 = 0, t4 = 0;
+        if (ok && jsonNum(c, "t2", t2) && jsonNum(c, "t4", t4)) {
+            cmd.t2 = (float)t2;
+            cmd.t4 = (float)t4;
+            cmd.hasRecipe = true;
+        }
+    }
+    _pending = cmd;
+    _hasPending = true;
+    _lastCmdId = cid;
+    Serial.printf("[WEB] Command received: id=%lu name=%s\n", (unsigned long)cid, cmd.name);
+}
+
+bool WebManager::takeCommand(WebCommand& out) {
+    if (!_hasPending) return false;
+    out = _pending;
+    _hasPending = false;
+    return true;
+}
+
+void WebManager::setAck(uint32_t id, bool ok, const char* msg) {
+    _ackId = id;
+    _ackOk = ok;
+    strncpy(_ackMsg, msg, sizeof(_ackMsg) - 1);
+    _ackMsg[sizeof(_ackMsg) - 1] = '\0';
+    _lastPostTime = 0;          // report the outcome in the very next update()
+    Serial.printf("[WEB] Ack id=%lu ok=%d (%s)\n", (unsigned long)id, ok, _ackMsg);
 }
 
 void WebManager::begin() {
@@ -58,7 +140,12 @@ void WebManager::buildJson(char* buf, size_t bufSize, const SystemStatus& status
         "\"remainingMs\":%lu,"
         "\"rampLag\":%s,"
         "\"rampLagAmount\":%.2f,"
-        "\"uptimeMs\":%lu"
+        "\"uptimeMs\":%lu,"
+        "\"servosOpen\":%s,"
+        "\"remoteCtl\":%s,"
+        "\"ackId\":%lu,"
+        "\"ackOk\":%s,"
+        "\"ackMsg\":\"%s\""
         "}",
         getStateName(status.state),
         getErrorName(status.errorCode),
@@ -78,7 +165,12 @@ void WebManager::buildJson(char* buf, size_t bufSize, const SystemStatus& status
         remaining,
         status.rampLag ? "true" : "false",
         status.rampLagAmount,
-        millis()
+        millis(),
+        status.servosOpen ? "true" : "false",
+        WEB_REMOTE_CONTROL_ENABLED ? "true" : "false",
+        (unsigned long)_ackId,
+        _ackOk ? "true" : "false",
+        _ackMsg
     );
 }
 
@@ -102,7 +194,7 @@ void WebManager::update(const SystemStatus& status) {
     if ((now - _lastPostTime) < WEB_POST_INTERVAL_MS) return;
     _lastPostTime = now;
 
-    char json[512];
+    char json[768];
     buildJson(json, sizeof(json), status);
 
     HTTPClient http;
@@ -132,5 +224,7 @@ WebManager::WebManager() {}
 void WebManager::begin() {}
 void WebManager::update(const SystemStatus&) {}
 bool WebManager::isConnected() const { return false; }
+bool WebManager::takeCommand(WebCommand&) { return false; }
+void WebManager::setAck(uint32_t, bool, const char*) {}
 
 #endif
