@@ -1011,6 +1011,12 @@ void startProcess() {
         return;
     }
 
+    // Feedforward map is relative to the chamber temperature at start
+    // (ambient). Must be set BEFORE any computeFF() call.
+    PIDController::setAmbientRef(sysStatus.filteredTemp);
+    Serial.printf("[PROCESS] Ambient reference for feedforward: %.1f °C\n",
+                  sysStatus.filteredTemp);
+
     // Reset PID
     pid.reset();
 

@@ -93,8 +93,8 @@
 //  (e.g. no network available) — control loop runs identical either way.
 #define WEB_DASHBOARD_ENABLED   true
 
-#define WIFI_SSID          "Airtel_Zerotouch"
-#define WIFI_PASSWORD      "Airtel@123"
+#define WIFI_SSID          "SEMINAR_HALL"
+#define WIFI_PASSWORD      "B109#rec"
 
 // Set to the PC's LAN IP running the Flask server (see thulir_dashboard
 // project). Find it with `ipconfig` (Windows) — look for IPv4 Address.
@@ -311,15 +311,20 @@
 //  scaled to 11.43 V instead of the nominal 12 V:
 //    Middle: 6.10 V / 11.43 V = 0.534    Top: 2.45 V / 11.43 V = 0.214
 #define BOTTOM_POWER_RATIO  1.00f   // 100% (11.43 V measured)
-#define MIDDLE_POWER_RATIO  0.534f  // → ≈ 6.10 V
-#define TOP_POWER_RATIO     0.214f  // → ≈ 2.45 V
+//  UPDATE: Middle and Top BTS7960 modules are now fed from buck converters
+//  set to 6.1 V and 2.45 V, so each stage runs at 100 % duty on its own rail.
+//  (PWM from a 12 V rail gave far more Peltier self-heating and never
+//  reached -20 °C.)  If you go back to a single 12 V rail, restore
+//  MIDDLE 0.534 / TOP 0.214 and the 60 / 30 % caps below.
+#define MIDDLE_POWER_RATIO  1.00f   // 6.10 V rail
+#define TOP_POWER_RATIO     1.00f   // 2.45 V rail
 
 //  Maximum PWM duty-cycle limits (absolute safety caps).
 //  These prevent any stage from exceeding its thermal budget
 //  even if PID demands 100%.
 #define BOTTOM_MAX_PWM_PCT  100.0f  // % of full duty
-#define MIDDLE_MAX_PWM_PCT   60.0f
-#define TOP_MAX_PWM_PCT      30.0f
+#define MIDDLE_MAX_PWM_PCT  100.0f   // rail is already 6.1 V
+#define TOP_MAX_PWM_PCT     100.0f   // rail is already 2.45 V
 
 //  Minimum PWM threshold — below this, output is forced to 0.
 //  Prevents ineffective dribble current that just heats wires.
@@ -338,27 +343,33 @@
 //
 //  DEFAULT_K* are the NVS-loadable fallback gains (loaded at boot).
 //  They are also the starting Approach gains until hardware-tuned.
-#define DEFAULT_KP           20.0f
-#define DEFAULT_KI            0.3f
-#define DEFAULT_KD            8.0f
+//
+//  RETUNED from the measured step response (Peltier_MinTemp_Test, buck-rail
+//  setup): process gain K ≈ 0.48 °C per % power, dead time ≈ 30 s, dominant
+//  time constant ≈ 4 min.  SIMC tuning for that plant gives
+//    Kp ≈ 8 %/°C,  Ki ≈ Kp/τi ≈ 0.035 %/(°C·s),  Kd ≈ Kp·θ/2 ≈ 120 %/(°C/s)
+//  (old Kp=20 was ~75 % of the ultimate gain → oscillation; Kd=8 did nothing).
+#define DEFAULT_KP            8.0f
+#define DEFAULT_KI            0.035f
+#define DEFAULT_KD          120.0f
 
 #define PID_SAMPLE_TIME_MS    500   // PID compute interval (ms)
 #define PID_OUTPUT_MIN        0.0f
 #define PID_OUTPUT_MAX      100.0f
 
 // --- Approach gains (Steps 1–4: reaching and holding a fixed setpoint) ---
-#define APPROACH_KP          20.0f
-#define APPROACH_KI           0.3f
-#define APPROACH_KD           8.0f
+#define APPROACH_KP           8.0f
+#define APPROACH_KI           0.035f
+#define APPROACH_KD         120.0f
 #define APPROACH_INTEGRAL_ZONE  5.0f   // °C — integral only inside this band
 
 // --- Ramp gains (Step 5: tracking a moving setpoint at −1°C/min) ---
 //  Higher Kp to track a moving target; lower Ki to avoid windup while
 //  the setpoint keeps moving; tighter zone to stay locked on the ramp.
-#define RAMP_KP              28.0f
-#define RAMP_KI               0.1f
-#define RAMP_KD               5.0f
-#define RAMP_INTEGRAL_ZONE    2.0f    // °C
+#define RAMP_KP              10.0f
+#define RAMP_KI               0.05f
+#define RAMP_KD             120.0f
+#define RAMP_INTEGRAL_ZONE    3.0f    // °C
 
 // --- Temperature-scaled feedforward ---
 //  Hardware data (measured): full cascade (12V / 6.1V / 2.45V) achieves
@@ -373,7 +384,11 @@
 //    setpoint = −10°C → FF ≈ 67%   (mid-ramp)
 //    setpoint = −20°C → FF ≈ 86%   (ramp final target)
 #define PID_FF_AMBIENT_REF    25.0f   // °C — reference point (no cooling needed)
-#define PID_FF_MAX_COOL      -27.0f   // °C — min temp at 100% cascade (measured)
+#define PID_FF_MAX_COOL      -27.0f   // °C — (legacy, no longer used by the FF map)
+//  Max cooling depth below the ambient reference at 100 % power. Measured:
+//  ≈ −23 °C after ~10 min from ~0 °C start (≈ 48 °C below a 25 °C ambient).
+//  The FF map is concave: FF = 100·(1 − sqrt(1 − ΔT/PID_FF_DELTA_MAX)).
+#define PID_FF_DELTA_MAX      48.0f   // °C
 #define PID_FF_MAX_PCT        92.0f   // % — cap to leave headroom for PID correction
 
 // --- Output slew rate limit ---

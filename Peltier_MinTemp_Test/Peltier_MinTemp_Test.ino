@@ -17,8 +17,10 @@
  *    s        stop (0 %)
  *  Power ramps smoothly (10 %/s) so the supplies are not shocked.
  *
- *  At 100 % master the stage outputs should be about:
- *    Bottom 11.4 V   Middle 6.1 V   Top 2.45 V   (measure with a meter!)
+ *  Power: Bottom BTS7960 on the 12 V supply, Middle on a 6.1 V buck,
+ *  Top on a 2.45 V buck (set the bucks BEFORE connecting the modules).
+ *  At 100 % master each stage is fully ON, so the Peltier voltages are
+ *  just the rail voltages (measure them with a meter!).
  *
  *  SAFETY: output is cut to 0 % if the sensor is lost, or if the
  *  temperature goes below -25 °C. Watch the hot side / heatsink
@@ -35,14 +37,17 @@
 #define ONE_WIRE_PIN 5
 
 // ---- Power ratios (fraction of master %) — match Config.h ----
-const float RATIO_BOTTOM = 1.000f;
-const float RATIO_MIDDLE = 0.534f;
-const float RATIO_TOP    = 0.214f;
+// Each BTS7960 is now powered from its OWN rail (Bottom 12 V supply,
+// Middle buck set to 6.1 V, Top buck set to 2.45 V), so every stage runs
+// at 100 % duty on its rail at full power -> all ratios 1.0.
+const float RATIO_BOTTOM = 1.0f;
+const float RATIO_MIDDLE = 1.0f;
+const float RATIO_TOP    = 1.0f;
 
-// ---- Stage caps (%) — match Config.h ----
+// ---- Stage caps (%) — no extra derating needed, the rail sets the voltage ----
 const float MAX_BOTTOM = 100.0f;
-const float MAX_MIDDLE = 60.0f;
-const float MAX_TOP    = 30.0f;
+const float MAX_MIDDLE = 100.0f;
+const float MAX_TOP    = 100.0f;
 
 // ---- PWM ----
 #define PWM_FREQ  5000

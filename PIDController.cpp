@@ -60,7 +60,16 @@ PIDController::PIDController()
     , _lastMeasurement(0.0f)
     , _lastComputeTime(0)
     , _firstCompute(true)
+    , _histCount(0)
+    , _histIdx(0)
 {
+}
+
+float PIDController::_ambientRef = PID_FF_AMBIENT_REF;
+
+void PIDController::setAmbientRef(float tempC) {
+    // Sanity-clamp: a wild reading must not wreck the feedforward map
+    _ambientRef = CLAMP(tempC, 15.0f, 40.0f);
 }
 
 // ============================================================
@@ -114,9 +123,9 @@ void PIDController::setRateLimit(float pctPerSec) {
  *  Clamped to [0, PID_FF_MAX_PCT] (leaves headroom for PID correction).
  */
 float PIDController::computeFeedforward(float setpoint) {
-    float range = PID_FF_AMBIENT_REF - PID_FF_MAX_COOL;   // = 25 − (−27) = 52
-    float delta = PID_FF_AMBIENT_REF - setpoint;
-    float ff = (delta / range) * 100.0f;
+    float x = (_ambientRef - setpoint) / PID_FF_DELTA_MAX;
+    x = CLAMP(x, 0.0f, 1.0f);
+    float ff = (1.0f - sqrtf(1.0f - x)) * 100.0f;
     return CLAMP(ff, 0.0f, PID_FF_MAX_PCT);
 }
 
@@ -161,7 +170,19 @@ bool PIDController::compute(float setpoint, float measurement) {
 
     // --- Derivative term (on measurement, NOT on error) ---
     // Avoids "derivative kick" when the setpoint steps suddenly.
-    float dMeasurement = (measurement - _lastMeasurement) / dt;
+    // Slope over a ~10 s window (oldest sample in the ring buffer → now).
+    // Needs ≥ 6 samples (~2.5 s) before it is trusted; D = 0 until then.
+    _hist[_histIdx]  = measurement;
+    _histT[_histIdx] = now;
+    _histIdx = (_histIdx + 1) % D_WIN;
+    if (_histCount < D_WIN) _histCount++;
+
+    float dMeasurement = 0.0f;
+    if (_histCount >= 6) {
+        uint8_t oldest = (_histCount < D_WIN) ? 0 : _histIdx;   // _histIdx now points at oldest
+        float span = (now - _histT[oldest]) / 1000.0f;
+        if (span > 0.5f) dMeasurement = (measurement - _hist[oldest]) / span;
+    }
     _dTerm = _kd * dMeasurement;   // positive dM (temp rising) → more cooling
 
     // --- Raw output = FF + P + I + D ---
@@ -212,6 +233,8 @@ void PIDController::reset() {
     _prevRateOutput = _feedforward; // Slew limiter starts from FF, not zero
     _firstCompute = true;
     _lastComputeTime = 0;
+    _histCount = 0;
+    _histIdx = 0;
 }
 
 void PIDController::softReset(float preserveRatio) {
@@ -224,6 +247,8 @@ void PIDController::softReset(float preserveRatio) {
     _prevRateOutput = _output;     // Continue smoothly from current output
     _firstCompute = true;
     _lastComputeTime = 0;
+    // Keep the derivative history across steps: it's a slope of the real
+    // temperature, unaffected by setpoint changes.
 }
 
 void PIDController::forceOutput(float value) {

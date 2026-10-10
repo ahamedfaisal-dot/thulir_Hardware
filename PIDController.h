@@ -92,9 +92,27 @@ public:
     // Formula: FF% = (PID_FF_AMBIENT_REF − setpoint)
     //                / (PID_FF_AMBIENT_REF − PID_FF_MAX_COOL) × 100
     //   clamped to [0, PID_FF_MAX_PCT].
+    //
+    // UPDATED (measured step response, Peltier_MinTemp_Test): cooling is
+    // concave in power (Peltier Joule heating ~ I²), so the old linear map
+    // over-estimated the power needed. Now:
+    //   x  = (ambientRef − setpoint) / PID_FF_DELTA_MAX      (0..1)
+    //   FF = 100 × (1 − sqrt(1 − x))
+    // ambientRef is the chamber temperature at process start (setAmbientRef).
     static float computeFeedforward(float setpoint);
+    static void  setAmbientRef(float tempC);
 
 private:
+    static float _ambientRef;
+
+    // Derivative is a slope over a ~10 s window of the filtered measurement
+    // (the old single-sample derivative was ~0 at this plant's slow rates and
+    // pure quantisation noise otherwise).
+    static const uint8_t D_WIN = 21;
+    float         _hist[D_WIN];
+    unsigned long _histT[D_WIN];
+    uint8_t       _histCount;
+    uint8_t       _histIdx;
     float    _kp, _ki, _kd;
     float    _outputMin, _outputMax;
     float    _integralZone;          // °C — runtime-configurable
