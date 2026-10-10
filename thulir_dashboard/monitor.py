@@ -201,6 +201,46 @@ class Monitor:
                     f"Run started — protocol: {snap['name'] + ' v' + str(snap['version']) if snap else 'none selected'}",
                     speak="run_started")
 
+    def _sync_recipe(self, st):
+        """The device is the source of truth for what actually runs. If its
+        reported recipe (hold minutes of steps 1-4, step 2/4 targets — edited on
+        the keypad) differs from the run's protocol snapshot, update the snapshot
+        so the reference profile, progress and total duration match the device."""
+        r = self.run
+        hold = st.get("recH")
+        if not r or not r.get("proto") or not isinstance(hold, list) or len(hold) != 4:
+            return
+        steps = r["proto"]["steps"]
+        if len(steps) != 5:
+            return
+        want = [_f(h) for h in hold]
+        t2, t4 = _f(st.get("recT2")), _f(st.get("recT4"))
+        if any(h is None or h <= 0 for h in want):
+            return
+        changes = []
+        for i in range(4):
+            if steps[i].get("type") != "hold":
+                return
+            if steps[i].get("hold_min") != want[i]:
+                changes.append(f"step {i + 1} hold {steps[i].get('hold_min'):g} → {want[i]:g} min")
+        for idx, val in ((1, t2), (3, t4)):
+            if val is not None and steps[idx].get("target") != val:
+                changes.append(f"step {idx + 1} target {steps[idx].get('target'):g} → {val:g} °C")
+        if not changes:
+            return
+        new = dict(r["proto"])
+        new["steps"] = [dict(s) for s in steps]
+        for i in range(4):
+            new["steps"][i]["hold_min"] = want[i]
+        if t2 is not None:
+            new["steps"][1]["target"] = t2
+        if t4 is not None:
+            new["steps"][3]["target"] = t4
+        r["proto"] = new
+        storage.update_run_snapshot(r["id"], new)
+        self._event("recipe_adjusted", "Process", "info",
+                    "Run profile updated to the device's recipe: " + "; ".join(changes))
+
     def _end_run(self, status, reason):
         r = self.run
         if not r:
@@ -260,6 +300,7 @@ class Monitor:
             self._handle_ack(st)
 
             self._update_lifecycle(st)
+            self._sync_recipe(st)
 
             if state == "READY" and prev != "READY":
                 self._event("system_ready", "System", "info", "System ready", speak="system_ready")

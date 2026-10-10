@@ -64,7 +64,7 @@ private:
 
     // HTTP POST runs in its own FreeRTOS task so a slow/unreachable server
     // can never stall loop() (and therefore keypad scanning).
-    char              _json[768];
+    char              _json[1024];
     volatile bool     _postReady;
     bool              _taskStarted;
     static void       postTask(void* arg);

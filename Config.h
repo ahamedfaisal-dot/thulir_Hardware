@@ -709,6 +709,12 @@ struct Recipe {
 // ============================================================
 
 struct SystemStatus {
+    // Recipe actually in effect on the device (reported to the dashboard so
+    // its reference profile follows keypad edits). Filled every loop().
+    uint16_t    recipeHold[4];        // hold minutes, steps 1-4
+    float       recipeT2;             // step 2 target
+    float       recipeT4;             // step 4 target
+
     SystemState state;
     ErrorCode   errorCode;
     ScreenID    currentScreen;

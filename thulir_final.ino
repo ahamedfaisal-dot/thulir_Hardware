@@ -410,6 +410,12 @@ void loop() {
     audioMgr.update();
 
     // --- 6b. Web dashboard telemetry (non-blocking, self-paced) ---
+    {   // publish the recipe in effect so the dashboard profile matches the device
+        const Recipe& rc = recipeMgr.getRecipe();
+        for (uint8_t i = 0; i < 4; i++) sysStatus.recipeHold[i] = rc.steps[i].holdTimeMin;
+        sysStatus.recipeT2 = rc.steps[1].targetTemp;
+        sysStatus.recipeT4 = rc.steps[3].targetTemp;
+    }
     webMgr.update(sysStatus);
 
     // --- 6b'. Remote command from the dashboard (START / ABORT) ---
@@ -1188,8 +1194,19 @@ void completeProcess() {
 //  STATE UPDATE FUNCTIONS
 // ============================================================
 
+// "At target" for a COOLING-ONLY system. The Peltiers cannot heat, so if the
+// chamber is already colder than the target and the PID has cooling off
+// (output ≈ 0), nothing more can be done — treat that as in-band instead of
+// waiting forever for the temperature to drift up (the stuck-at-23.3 °C /
+// target-25 °C case). Returns the |error| to use for band checks.
+static float bandError() {
+    float err = sysStatus.filteredTemp - sysStatus.targetTemp;
+    if (err < -TARGET_TOLERANCE && sysStatus.pidOutput <= 1.0f) return 0.0f;
+    return fabsf(err);
+}
+
 void updateApproachState() {
-    float error = fabsf(sysStatus.filteredTemp - sysStatus.targetTemp);
+    float error = bandError();
 
     if (error <= TARGET_TOLERANCE) {
         // Temperature is within tolerance band
@@ -1221,7 +1238,7 @@ void updateApproachState() {
 }
 
 void updateHoldState() {
-    float error = fabsf(sysStatus.filteredTemp - sysStatus.targetTemp);
+    float error = bandError();
 
     #if HOLD_TIMER_PAUSE_ON_DEVIATION
         if (error <= TARGET_TOLERANCE) {

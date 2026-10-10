@@ -152,7 +152,10 @@ void WebManager::buildJson(char* buf, size_t bufSize, const SystemStatus& status
         "\"remoteCtl\":%s,"
         "\"ackId\":%lu,"
         "\"ackOk\":%s,"
-        "\"ackMsg\":\"%s\""
+        "\"ackMsg\":\"%s\","
+        "\"recH\":[%u,%u,%u,%u],"
+        "\"recT2\":%.0f,"
+        "\"recT4\":%.0f"
         "}",
         getStateName(status.state),
         getErrorName(status.errorCode),
@@ -177,7 +180,11 @@ void WebManager::buildJson(char* buf, size_t bufSize, const SystemStatus& status
         WEB_REMOTE_CONTROL_ENABLED ? "true" : "false",
         (unsigned long)_ackId,
         _ackOk ? "true" : "false",
-        _ackMsg
+        _ackMsg,
+        (unsigned)status.recipeHold[0], (unsigned)status.recipeHold[1],
+        (unsigned)status.recipeHold[2], (unsigned)status.recipeHold[3],
+        status.recipeT2,
+        status.recipeT4
     );
 }
 

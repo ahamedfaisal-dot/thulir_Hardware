@@ -220,6 +220,11 @@ def create_run(run_id, proto, started_at):
         json.dumps(proto) if proto else None, started_at))
 
 
+def update_run_snapshot(run_id, proto):
+    """Replace the run's stored protocol snapshot (device recipe adjustments)."""
+    _x("UPDATE runs SET protocol_snapshot=? WHERE id=?", (json.dumps(proto), run_id))
+
+
 def finish_run(run_id, status, paused_total_s):
     _x("UPDATE runs SET ended_at=?, final_status=?, paused_total_s=? WHERE id=?",
        (now_iso(), status, paused_total_s, run_id))
