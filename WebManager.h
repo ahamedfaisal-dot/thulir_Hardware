@@ -56,11 +56,19 @@ private:
     unsigned long _lastWifiAttempt;
     bool          _wifiStarted;
     WebCommand    _pending;
-    bool          _hasPending;
+    volatile bool _hasPending;
     uint32_t      _lastCmdId;
     uint32_t      _ackId;
     bool          _ackOk;
     char          _ackMsg[48];
+
+    // HTTP POST runs in its own FreeRTOS task so a slow/unreachable server
+    // can never stall loop() (and therefore keypad scanning).
+    char              _json[768];
+    volatile bool     _postReady;
+    bool              _taskStarted;
+    static void       postTask(void* arg);
+    void              doPost();
 
     void parseCommand(const char* body);
 

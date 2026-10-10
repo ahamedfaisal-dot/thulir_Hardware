@@ -36,7 +36,7 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-#define DS18B20_PIN   02  // Change to test a different GPIO
+#define DS18B20_PIN   5   // NOT 43: GPIO43 is UART0 TX (the serial monitor itself)
 #define READ_INTERVAL_MS 1000
 
 // Deliberately NOT global objects. OneWire's constructor touches the

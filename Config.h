@@ -93,12 +93,12 @@
 //  (e.g. no network available) — control loop runs identical either way.
 #define WEB_DASHBOARD_ENABLED   true
 
-#define WIFI_SSID          "SEMINAR_HALL"
-#define WIFI_PASSWORD      "B109#rec"
+#define WIFI_SSID          "Airtel_Zerotouch"
+#define WIFI_PASSWORD      "Airtel@123"
 
 // Set to the PC's LAN IP running the Flask server (see thulir_dashboard
 // project). Find it with `ipconfig` (Windows) — look for IPv4 Address.
-#define WEB_SERVER_HOST    "172.16.12.62"   // <-- CHANGE to your PC's IP
+#define WEB_SERVER_HOST    "172.16.13.124"   // <-- CHANGE to your PC's IP
 #define WEB_SERVER_PORT    5000
 #define WEB_SERVER_PATH    "/api/data"
 
@@ -158,7 +158,7 @@
 //  belt-and-suspenders measure). In the actual build these three
 //  lines are physically wired to GND / 3.3V, not to these GPIOs.
 #define BOTTOM_RPWM_PIN    4    // PWM signal → BTS7960 RPWM
-#define BOTTOM_LPWM_PIN    5    // retained for code compat (pin not used — LPWM hardwired to GND)
+#define BOTTOM_LPWM_PIN    255  // not used — LPWM hardwired to GND (255 = skip; GPIO5 now used by DS18B20)
 #define BOTTOM_REN_PIN     6    // retained for code compat (pin not used — R_EN hardwired to 3.3V)
 #define BOTTOM_LEN_PIN     7    // retained for code compat (pin not used — L_EN hardwired to 3.3V)
 
@@ -182,7 +182,7 @@
 #define TOP_RPWM_PIN       42   // Moved from GPIO12 — freed for TFT native FSPI CLK
 #define TOP_LPWM_PIN       21   // retained for code compat (pin not used — LPWM hardwired to GND)
 #define TOP_REN_PIN        44   // retained for code compat (pin not used — R_EN hardwired to 3.3V)
-#define TOP_LEN_PIN        15   // retained for code compat (pin not used — L_EN hardwired to 3.3V)
+#define TOP_LEN_PIN        255  // not used — L_EN hardwired to 3.3V (255 = skip; GPIO15 now used by DS18B20)
 
 // --- SHT3x Temperature + Humidity Sensor (cold side) --------
 //  I2C sensor — replaces the DS18B20 for cold-side sensing.
@@ -216,7 +216,17 @@
 //  bring-up (GPIO43/44 are the ESP32-S3's default UART0 pins, which
 //  the boot ROM also drives). Moved to GPIO37 — free, non-strapping,
 //  confirmed present on this board's header, unused elsewhere here.
-#define DS18B20_HOT_PIN    37   // Change when installed
+#define DS18B20_HOT_PIN    37   // Hot-side sensor (optional, disabled)
+
+// --- DS18B20 Cold-side sensor (chamber temperature for PID + dashboard) ---
+//  Verified on GPIO5 with the raw 1-Wire test (pin freed from BOTTOM_LPWM).
+//  When COLD_SENSOR_DS18B20 is true, the PID/dashboard temperature comes
+//  from this DS18B20; the SHT3x is then used for HUMIDITY ONLY.
+//  Set false to go back to the SHT3x as the temperature source.
+#define COLD_SENSOR_DS18B20   true
+#define DS18B20_COLD_PIN      5
+#define COLD_DS_RESOLUTION    11     // bits: 11 = 0.125°C, 375 ms conversion
+#define COLD_DS_CONVERSION_MS 400    // wait before reading a conversion
 
 // --- TFT Display (2.8" ILI9341 SPI, 320×240) ---------------
 //  Uses Adafruit_ILI9341 + Adafruit_GFX (NOT TFT_eSPI — TFT_eSPI v2.5.43
@@ -293,9 +303,13 @@
 //    Middle =  51% × 60% = 30.6%
 //    Top    =  20% × 60% = 12.0%
 
-#define BOTTOM_POWER_RATIO  1.00f   // 100%
-#define MIDDLE_POWER_RATIO  0.51f   //  51%
-#define TOP_POWER_RATIO     0.20f   //  20%
+//  Calibrated against the MEASURED bus voltage: Bottom delivers only
+//  11.43 V at 100% duty (supply/BTS7960/wiring drop), so the ratios are
+//  scaled to 11.43 V instead of the nominal 12 V:
+//    Middle: 6.10 V / 11.43 V = 0.534    Top: 2.45 V / 11.43 V = 0.214
+#define BOTTOM_POWER_RATIO  1.00f   // 100% (11.43 V measured)
+#define MIDDLE_POWER_RATIO  0.534f  // → ≈ 6.10 V
+#define TOP_POWER_RATIO     0.214f  // → ≈ 2.45 V
 
 //  Maximum PWM duty-cycle limits (absolute safety caps).
 //  These prevent any stage from exceeding its thermal budget
@@ -495,9 +509,14 @@
 
 //  ESP32 LEDC channel assignments for servo PWM.
 //  Must not conflict with BTS7960 LEDC channels (0/1/2 used by
-//  PeltierControl). Channels 3 and 4 are reserved here.
-#define SERVO1_LEDC_CHANNEL    3
-#define SERVO2_LEDC_CHANNEL    4
+//  PeltierControl).
+//  IMPORTANT: LEDC channels share a hardware timer in pairs
+//  (0/1, 2/3, 4/5, 6/7). Servos run 50 Hz / 16-bit, Peltiers 5 kHz / 10-bit,
+//  so they must NOT share a timer. Channel 3 shares a timer with Peltier
+//  channel 2 (TOP stage) and would silently reconfigure it to 50 Hz,
+//  leaving the TOP stage almost unpowered. Use 4 and 5 (their own timer).
+#define SERVO1_LEDC_CHANNEL    4
+#define SERVO2_LEDC_CHANNEL    5
 #define SERVO_LEDC_FREQ        50   // Hz (standard hobby servo)
 #define SERVO_LEDC_RES         16   // bits → 0–65535 duty range
 

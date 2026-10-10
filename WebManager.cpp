@@ -14,6 +14,8 @@ WebManager::WebManager()
     , _lastWifiAttempt(0)
     , _wifiStarted(false)
     , _hasPending(false)
+    , _postReady(false)
+    , _taskStarted(false)
     , _lastCmdId(0)
     , _ackId(0)
     , _ackOk(false)
@@ -100,6 +102,11 @@ void WebManager::setAck(uint32_t id, bool ok, const char* msg) {
 
 void WebManager::begin() {
     WiFi.mode(WIFI_STA);
+    // Without this the driver retries the join every ~100 ms when the AP is
+    // missing / password is wrong, flooding the log and hogging the radio.
+    // update() already retries every WEB_WIFI_RETRY_MS.
+    WiFi.setAutoReconnect(false);
+    WiFi.persistent(false);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     _wifiStarted = true;
     _lastWifiAttempt = millis();
@@ -194,9 +201,30 @@ void WebManager::update(const SystemStatus& status) {
     if ((now - _lastPostTime) < WEB_POST_INTERVAL_MS) return;
     _lastPostTime = now;
 
-    char json[768];
-    buildJson(json, sizeof(json), status);
+    if (!_taskStarted) {
+        // Core 0 (WiFi core); Arduino loop() runs on core 1.
+        xTaskCreatePinnedToCore(postTask, "webPost", 8192, this, 1, nullptr, 0);
+        _taskStarted = true;
+    }
+    if (_postReady) return;   // previous POST still in flight — skip this one
 
+    buildJson(_json, sizeof(_json), status);
+    _postReady = true;        // hand off to postTask
+}
+
+void WebManager::postTask(void* arg) {
+    WebManager* self = static_cast<WebManager*>(arg);
+    for (;;) {
+        if (self->_postReady) {
+            self->doPost();
+            self->_postReady = false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
+void WebManager::doPost() {
+    const char* json = _json;
     HTTPClient http;
     char url[80];
     snprintf(url, sizeof(url), "http://%s:%d%s",
@@ -207,6 +235,7 @@ void WebManager::update(const SystemStatus& status) {
     // genuine blocking call under the hood — kept short and infrequent
     // by design, same tradeoff already accepted for the display's
     // ID-readback health check).
+    http.setConnectTimeout(1000);
     http.setTimeout(1000);
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
@@ -214,6 +243,15 @@ void WebManager::update(const SystemStatus& status) {
     int code = http.POST(json);
     if (code <= 0) {
         Serial.printf("[WEB] POST failed: %s\n", http.errorToString(code).c_str());
+    } else if (code == 200) {
+        // The server may attach a pending dashboard command to its reply.
+        String body = http.getString();
+        if (body.length() < 400) {
+            if (body.indexOf("\"cmd\"") >= 0) {
+                Serial.printf("[WEB] Reply: %s\n", body.c_str());
+            }
+            parseCommand(body.c_str());
+        }
     }
     http.end();
 }

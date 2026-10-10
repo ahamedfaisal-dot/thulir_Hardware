@@ -100,7 +100,10 @@ def predict():
 def graph():
     rid = request.args.get("run") or mon.graph_run_id() or mon.last_run_id
     if not rid:
-        return jsonify({"run_id": None, "samples": [], "profile": [], "tolerance": None})
+        sel = mon.selected          # no run yet: show the selected protocol's plan
+        return jsonify({"run_id": None, "samples": [],
+                        "profile": sel["profile"] if sel and sel["valid"] else [],
+                        "tolerance": sel.get("tolerance") if sel else None})
     run = storage.get_run(rid)
     if not run:
         return _err("Run not found.", 404)

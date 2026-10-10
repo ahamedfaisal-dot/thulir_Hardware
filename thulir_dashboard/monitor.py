@@ -392,8 +392,9 @@ class Monitor:
         sensor_ok = _b(st.get("sensorValid")) if st else False
         # stale readings are never presented as live
         actual = _f(st.get("filteredTemp")) if (st and sensor_ok and conn) else None
+        # The device's target is only meaningful while a process is active (it reads 0 °C when idle)
         target = ((_f(st.get("setpoint")) if state == "RAMPING" else _f(st.get("targetTemp")))
-                  if (st and conn) else None)
+                  if (st and conn and state in (RUNNING_STATES | {"PAUSED", "COMPLETE"})) else None)
         dev = round(actual - target, 2) if actual is not None and target is not None else None
         tol = self._tolerance()
         stale_age = round(now - self.last_rx, 1) if self.last_rx is not None else None

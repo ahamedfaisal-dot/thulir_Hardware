@@ -10,6 +10,10 @@
 TemperatureManager::TemperatureManager()
     : _sht()
     , _lastReadTime(0)
+    , _coldOneWire(nullptr)
+    , _coldSensors(nullptr)
+    , _coldRequested(false)
+    , _coldRequestTime(0)
     , _hotOneWire(nullptr)
     , _hotSensors(nullptr)
     , _hotReadState(HOT_READ_IDLE)
@@ -35,6 +39,49 @@ TemperatureManager::TemperatureManager()
 bool TemperatureManager::begin() {
     Wire.begin(SHT3X_SDA_PIN, SHT3X_SCL_PIN);
 
+#if COLD_SENSOR_DS18B20
+    // --- Cold-side temperature: DS18B20 (PID + dashboard) ---
+    _coldOneWire = new OneWire(DS18B20_COLD_PIN);
+    _coldSensors = new DallasTemperature(_coldOneWire);
+    _coldSensors->begin();
+    _sensorCount = _coldSensors->getDeviceCount();
+    _sensorValid = false;
+
+    if (_sensorCount > 0) {
+        _coldSensors->setResolution(COLD_DS_RESOLUTION);
+        // First reading is blocking (setup only) so PID starts with a real value
+        _coldSensors->setWaitForConversion(true);
+        _coldSensors->requestTemperatures();
+        float t = _coldSensors->getTempCByIndex(0);
+        _coldSensors->setWaitForConversion(false);
+
+        if (validateReading(t)) {
+            _rawTemp = t + _calOffset;
+            _filteredTemp = _rawTemp;
+            for (int i = 0; i < TEMP_FILTER_SAMPLES; i++) _filterBuffer[i] = _rawTemp;
+            _filterCount = TEMP_FILTER_SAMPLES;
+            _sensorValid = true;
+            Serial.printf("[TEMP] Cold-side DS18B20 on GPIO%d initialized: %.2f °C (offset: %.2f)\n",
+                          DS18B20_COLD_PIN, _rawTemp, _calOffset);
+        } else {
+            Serial.println("[TEMP] WARNING: DS18B20 initial reading invalid");
+        }
+    } else {
+        Serial.printf("[TEMP] ERROR: cold-side DS18B20 not found on GPIO%d!\n", DS18B20_COLD_PIN);
+    }
+
+    // --- SHT3x: humidity only ---
+    if (_sht.begin(SHT3X_I2C_ADDR)) {
+        float t, h;
+        if (_sht.readBoth(&t, &h) && validateHumidity(h)) {
+            _humidity = h;
+            _humidityValid = true;
+            Serial.printf("[TEMP] SHT3x (humidity only) OK: %.1f%% RH\n", h);
+        }
+    } else {
+        Serial.println("[TEMP] WARNING: SHT3x not found — humidity unavailable");
+    }
+#else
     if (!_sht.begin(SHT3X_I2C_ADDR)) {
         Serial.println("[TEMP] ERROR: SHT3x not found on I2C bus!");
         _sensorCount = 0;
@@ -62,6 +109,7 @@ bool TemperatureManager::begin() {
         Serial.println("[TEMP] WARNING: SHT3x initial reading invalid");
         _sensorValid = false;
     }
+#endif
 
     // Optional hot-side sensor (unchanged 1-Wire DS18B20)
     #if HOT_SIDE_SENSOR_ENABLED
@@ -101,6 +149,7 @@ void TemperatureManager::update() {
         float reading, humReading;
         bool ok = _sht.readBoth(&reading, &humReading);
 
+#if !COLD_SENSOR_DS18B20   // SHT3x temperature path (disabled when DS18B20 is the cold sensor)
         // Reject an implausible jump vs. the last accepted reading
         // (e.g. an I2C glitch) — but only once we have a prior reading.
         bool jumpRejected = false;
@@ -140,6 +189,7 @@ void TemperatureManager::update() {
             }
             // Keep using the last valid filtered value
         }
+#endif
 
         // Humidity is display-only — validated but not jump-filtered or
         // gated on the temperature path above.
@@ -150,6 +200,10 @@ void TemperatureManager::update() {
             _humidityValid = false;
         }
     }
+
+    #if COLD_SENSOR_DS18B20
+        updateColdDS(now);
+    #endif
 
     // --- Optional hot-side DS18B20 (unchanged async 1-Wire logic) ---
     #if HOT_SIDE_SENSOR_ENABLED
@@ -186,6 +240,55 @@ void TemperatureManager::update() {
         }
     #endif
 }
+
+#if COLD_SENSOR_DS18B20
+// Non-blocking DS18B20 cycle: request a conversion, come back after
+// COLD_DS_CONVERSION_MS and read it. Same validation / jump rejection /
+// moving average / fault logic the SHT3x temperature path used.
+void TemperatureManager::updateColdDS(unsigned long now) {
+    if (!_coldSensors || _sensorCount == 0) return;
+
+    if (!_coldRequested) {
+        _coldSensors->requestTemperatures();
+        _coldRequestTime = now;
+        _coldRequested = true;
+        return;
+    }
+    if ((now - _coldRequestTime) < COLD_DS_CONVERSION_MS) return;
+
+    float reading = _coldSensors->getTempCByIndex(0);
+    _coldRequested = false;
+
+    bool ok = validateReading(reading);
+    if (ok && _filterCount > 0) {
+        float calibrated = reading + _calOffset;
+        if (fabsf(calibrated - _rawTemp) > TEMP_INVALID_THRESH) {
+            Serial.printf("[TEMP] Rejected implausible jump: %.2f -> %.2f\n",
+                          _rawTemp, calibrated);
+            ok = false;
+        }
+    }
+
+    if (ok) {
+        float calibrated = reading + _calOffset;
+        _rawTemp = calibrated;
+        _filterBuffer[_filterIndex] = calibrated;
+        _filterIndex = (_filterIndex + 1) % TEMP_FILTER_SAMPLES;
+        if (_filterCount < TEMP_FILTER_SAMPLES) _filterCount++;
+        _filteredTemp = computeFilteredTemp();
+        _sensorValid = true;
+        _consecutiveErrors = 0;
+    } else {
+        _consecutiveErrors++;
+        Serial.printf("[TEMP] Invalid/failed DS18B20 reading (errors: %d)\n",
+                      _consecutiveErrors);
+        if (_consecutiveErrors >= 5) {
+            _sensorValid = false;
+            Serial.println("[TEMP] SENSOR FAULT — too many consecutive errors");
+        }
+    }
+}
+#endif
 
 float TemperatureManager::getRawTemp() const {
     return _rawTemp;

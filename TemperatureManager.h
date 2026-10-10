@@ -62,6 +62,13 @@ private:
     Adafruit_SHT31 _sht;
     unsigned long  _lastReadTime;
 
+    // Cold-side DS18B20 (used when COLD_SENSOR_DS18B20 is true)
+    OneWire*           _coldOneWire;
+    DallasTemperature* _coldSensors;
+    bool               _coldRequested;
+    unsigned long      _coldRequestTime;
+    void updateColdDS(unsigned long now);
+
     // Optional hot-side sensor (unchanged 1-Wire/DS18B20 async logic)
     OneWire*           _hotOneWire;
     DallasTemperature* _hotSensors;
