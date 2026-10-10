@@ -15,6 +15,7 @@
  *  Commands (type then Enter):
  *    0..100   set master power in %   (e.g. 100 = full power)
  *    s        stop (0 %)
+ *    f20000   change PWM frequency in Hz (500..25000, default 5000)
  *  Power ramps smoothly (10 %/s) so the supplies are not shocked.
  *
  *  Power: Bottom BTS7960 on the 12 V supply, Middle on a 6.1 V buck,
@@ -67,6 +68,7 @@ float minTemp       = 1000.0f;
 float startTemp     = NAN;
 unsigned long startMs = 0;
 bool  running = false;
+uint32_t pwmFreq = PWM_FREQ;   // changeable at runtime with "f<hz>"
 
 static void writeStage(uint8_t ch, float pct, float cap) {
     if (pct < 0) pct = 0;
@@ -110,6 +112,16 @@ void loop() {
             allOff();
             running = false;
             Serial.println(">> STOPPED (0 %)");
+        } else if (line.length() > 1 && (line[0] == 'f' || line[0] == 'F')) {
+            // f20000 -> change PWM frequency live (BTS7960 max ~25 kHz)
+            uint32_t hz = line.substring(1).toInt();
+            if (hz >= 500 && hz <= 25000) {
+                pwmFreq = hz;
+                for (uint8_t ch = 0; ch < 3; ch++) ledcSetup(ch, pwmFreq, PWM_BITS);
+                Serial.printf(">> PWM frequency = %lu Hz\n", (unsigned long)pwmFreq);
+            } else {
+                Serial.println(">> frequency must be 500..25000 Hz");
+            }
         } else if (line.length() > 0) {
             float v = line.toFloat();
             if (v < 0) v = 0;
