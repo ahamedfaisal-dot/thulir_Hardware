@@ -157,7 +157,10 @@
 //  compatibility (it initialises these pins in software as a
 //  belt-and-suspenders measure). In the actual build these three
 //  lines are physically wired to GND / 3.3V, not to these GPIOs.
-#define BOTTOM_RPWM_PIN    4    // PWM signal → BTS7960 RPWM
+//  NOTE: Bottom and Middle Peltiers are SWAPPED between the two BTS7960
+//  modules in the actual wiring: the BOTTOM Peltier is on the module whose
+//  RPWM is GPIO8, and the MIDDLE Peltier is on the module whose RPWM is GPIO4.
+#define BOTTOM_RPWM_PIN    8    // PWM signal → BTS7960 RPWM (module the BOTTOM Peltier is plugged into)
 #define BOTTOM_LPWM_PIN    255  // not used — LPWM hardwired to GND (255 = skip; GPIO5 now used by DS18B20)
 #define BOTTOM_REN_PIN     6    // retained for code compat (pin not used — R_EN hardwired to 3.3V)
 #define BOTTOM_LEN_PIN     7    // retained for code compat (pin not used — L_EN hardwired to 3.3V)
@@ -167,7 +170,7 @@
 //  LPWM: hardwired to GND — no GPIO used in actual build
 //  R_EN: hardwired to 3.3V — no GPIO used in actual build
 //  L_EN: hardwired to 3.3V — no GPIO used in actual build
-#define MIDDLE_RPWM_PIN    8
+#define MIDDLE_RPWM_PIN    4    // swapped with BOTTOM — see note above
 #define MIDDLE_LPWM_PIN    47   // retained for code compat (pin not used — LPWM hardwired to GND)
 #define MIDDLE_REN_PIN     48   // retained for code compat (pin not used — R_EN hardwired to 3.3V)
 // MIDDLE_LEN_PIN: hardwired to 3.3V — GPIO11 freed for TFT MOSI.
