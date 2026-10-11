@@ -64,11 +64,34 @@ DallasTemperature sensors(&oneWire);
 float targetMaster  = 0.0f;   // requested master %
 float currentMaster = 0.0f;   // ramped master %
 float tempC         = NAN;
+float tempC2        = NAN;   // second probe (if connected)
 float minTemp       = 1000.0f;
 float startTemp     = NAN;
 unsigned long startMs = 0;
 bool  running = false;
 uint32_t pwmFreq = PWM_FREQ;   // changeable at runtime with "f<hz>"
+
+// Auto-stop so a forgotten test cannot run forever (minutes). Change if needed.
+const unsigned long TEST_MINUTES = 20;
+
+// Time (minutes since start) at which the temperature first fell to each level
+const float MILESTONE_C[] = {20, 15, 10, 5, 0, -5, -10, -15, -20};
+const uint8_t N_MILESTONES = sizeof(MILESTONE_C) / sizeof(MILESTONE_C[0]);
+float milestoneMin[N_MILESTONES];
+
+static void resetMilestones() {
+    for (uint8_t i = 0; i < N_MILESTONES; i++) milestoneMin[i] = NAN;
+}
+
+static void printSummary() {
+    Serial.println("---- SUMMARY ----");
+    Serial.printf("Start temp: %.2f C   Lowest: %.2f C\n", startTemp, (minTemp < 999 ? minTemp : NAN));
+    for (uint8_t i = 0; i < N_MILESTONES; i++) {
+        if (isnan(milestoneMin[i])) Serial.printf("  reached %4.0f C : not reached\n", MILESTONE_C[i]);
+        else                        Serial.printf("  reached %4.0f C : %.1f min\n", MILESTONE_C[i], milestoneMin[i]);
+    }
+    Serial.println("-----------------");
+}
 
 static void writeStage(uint8_t ch, float pct, float cap) {
     if (pct < 0) pct = 0;
@@ -95,6 +118,7 @@ void setup() {
     ledcSetup(1, PWM_FREQ, PWM_BITS); ledcAttachPin(MIDDLE_RPWM, 1);
     ledcSetup(2, PWM_FREQ, PWM_BITS); ledcAttachPin(TOP_RPWM,    2);
     allOff();
+    resetMilestones();
 
     sensors.begin();
     sensors.setResolution(11);
@@ -110,6 +134,7 @@ void loop() {
         line.trim();
         if (line.equalsIgnoreCase("s")) {
             allOff();
+            if (running) printSummary();
             running = false;
             Serial.println(">> STOPPED (0 %)");
         } else if (line.length() > 1 && (line[0] == 'f' || line[0] == 'F')) {
@@ -132,6 +157,7 @@ void loop() {
                 startMs = millis();
                 startTemp = tempC;
                 minTemp = 1000.0f;
+                resetMilestones();
             }
             Serial.printf(">> Master target = %.0f %%\n", targetMaster);
         }
@@ -143,6 +169,18 @@ void loop() {
         lastRead = millis();
         sensors.requestTemperatures();
         float t = sensors.getTempCByIndex(0);
+        // Optional 2nd probe on the same wire (e.g. cold fins vs chamber air).
+        if (sensors.getDeviceCount() > 1) {
+            float t2 = sensors.getTempCByIndex(1);
+            if (t2 != DEVICE_DISCONNECTED_C && t2 > -126.0f && t2 != 85.0f) {
+                tempC2 = t2;
+                if (t2 <= CUTOFF_LOW_C) {
+                    Serial.printf("!! probe 2: %.2f C below cutoff -> outputs OFF\n", t2);
+                    allOff();
+                    running = false;
+                }
+            }
+        }
 
         if (t == DEVICE_DISCONNECTED_C || t <= -126.0f || t == 85.0f) {
             Serial.println("!! SENSOR LOST -> outputs OFF");
@@ -151,6 +189,17 @@ void loop() {
         } else {
             tempC = t;
             if (t < minTemp) minTemp = t;
+            if (running) {
+                float m = (millis() - startMs) / 60000.0f;
+                for (uint8_t i = 0; i < N_MILESTONES; i++)
+                    if (isnan(milestoneMin[i]) && t <= MILESTONE_C[i]) milestoneMin[i] = m;
+                if (m >= TEST_MINUTES) {
+                    Serial.printf(">> %lu min test time reached -> outputs OFF\n", TEST_MINUTES);
+                    allOff();
+                    printSummary();
+                    running = false;
+                }
+            }
             if (t <= CUTOFF_LOW_C) {
                 Serial.printf("!! %.2f C below cutoff %.1f -> outputs OFF\n", t, CUTOFF_LOW_C);
                 allOff();
@@ -172,12 +221,14 @@ void loop() {
 
     // ---- Log every 2 s ----
     static unsigned long lastLog = 0;
-    if (now - lastLog >= 2000) {
+    if (now - lastLog >= 5000) {
         lastLog = now;
         float mins = running ? (now - startMs) / 60000.0f : 0.0f;
-        Serial.printf("t=%5.1f min | Temp=%7.2f C | Min=%7.2f C | master=%3.0f%% "
+        char p2[24] = "";
+        if (!isnan(tempC2)) snprintf(p2, sizeof(p2), " | Probe2=%7.2f C", tempC2);
+        Serial.printf("t=%5.1f min | Temp=%7.2f C%s | Min=%7.2f C | master=%3.0f%% "
                       "BOT=%3.0f%% MID=%3.0f%% TOP=%3.0f%%\n",
-                      mins, tempC, (minTemp < 999 ? minTemp : NAN), currentMaster,
+                      mins, tempC, p2, (minTemp < 999 ? minTemp : NAN), currentMaster,
                       min(currentMaster * RATIO_BOTTOM, MAX_BOTTOM),
                       min(currentMaster * RATIO_MIDDLE, MAX_MIDDLE),
                       min(currentMaster * RATIO_TOP,    MAX_TOP));
