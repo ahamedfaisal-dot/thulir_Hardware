@@ -138,7 +138,8 @@ void DisplayManager::drawScreen(ScreenID screen, const SystemStatus& status,
         case SCREEN_COMPLETE:       drawCompleteScreen(status); break;
         case SCREEN_STOPPED:        drawStoppedScreen(); break;
         case SCREEN_MANUAL_PWM:     drawManualPWMScreen(status); break;
-        default:                    drawHomeScreen(status); _homeFrameReady = true; break;
+        case SCREEN_LANGUAGE:       drawLanguageScreen(); break;
+        default:                   drawHomeScreen(status); _homeFrameReady = true; break;
     }
 }
 
@@ -853,6 +854,45 @@ void DisplayManager::drawCalibrationScreen(const SystemStatus& status) {
     _tft->setTextColor(COLOR_TEXT_DIM);
     _tft->setCursor(10, 225);
     _tft->print("C=BACK  #=SAVE");
+}
+
+// ============================================================
+//  LANGUAGE SELECT SCREEN (shown after the splash, and from Settings)
+//  The language is the SD-card folder the DFPlayer speaks from.
+// ============================================================
+
+void DisplayManager::drawLanguageScreen() {
+    drawHeader();
+    drawDivider(22);
+
+    _tft->setTextSize(2);
+    _tft->setTextColor(COLOR_TEMP_ACTUAL);
+    _tft->setCursor(10, 30);
+    _tft->print("SELECT LANGUAGE");
+
+    drawDivider(52);
+
+    const char* langs[] = {
+        "1  English",
+        "2  Hindi",
+        "3  Tamil",
+        "4  Kannada",
+        "5  Malayalam",
+        "6  Telugu"
+    };
+
+    _tft->setTextSize(2);
+    _tft->setTextColor(COLOR_TEXT_PRIMARY);
+    for (int i = 0; i < 6; i++) {
+        _tft->setCursor(20, 62 + i * 25);
+        _tft->print(langs[i]);
+    }
+
+    drawDivider(215);
+    _tft->setTextSize(1);
+    _tft->setTextColor(COLOR_TEXT_DIM);
+    _tft->setCursor(10, 225);
+    _tft->print("1-6=SELECT");
 }
 
 // ============================================================

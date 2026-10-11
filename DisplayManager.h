@@ -130,6 +130,7 @@ private:
     void drawCompleteScreen(const SystemStatus& status);
     void drawStoppedScreen();
     void drawManualPWMScreen(const SystemStatus& status);
+    void drawLanguageScreen();
 
     // Format helpers
     void formatTime(unsigned long ms, char* buf, size_t len);

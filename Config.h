@@ -652,7 +652,8 @@ enum ScreenID {
     SCREEN_FAULT,
     SCREEN_COMPLETE,
     SCREEN_STOPPED,
-    SCREEN_MANUAL_PWM
+    SCREEN_MANUAL_PWM,
+    SCREEN_LANGUAGE
 };
 
 enum PeltierStage {

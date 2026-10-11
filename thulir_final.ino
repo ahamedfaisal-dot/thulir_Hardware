@@ -85,6 +85,7 @@ inline DFRobotDFPlayerMini& getDFPlayer() {
 }
 
 SystemStatus      sysStatus;
+bool              languageChosen = false;   // false until the operator picks a language at boot
 
 // ============================================================
 //  NON-BLOCKING TIMERS
@@ -115,6 +116,7 @@ unsigned long displayCheckAt      = 0;
 void handleKeypress(char key);
 void handleHomeKey(char key);
 void handleMenuKey(char key);
+void handleLanguageKey(char key);
 void handleProgramKey(char key);
 void handleStepEditKey(char key);
 void handleConfirmStartKey(char key);
@@ -247,7 +249,18 @@ void setup() {
 
     // Display first (gives visual feedback during boot)
     Serial.println("[BOOT] Initializing TFT display...");
-    displayMgr.begin();
+    displayMgr.begin();           // shows the THULIR splash
+
+    // Keypad + audio come up right after the splash so the operator can pick
+    // the language immediately; the remaining hardware initialises behind it.
+    Serial.println("[BOOT] Initializing keypad...");
+    keypadMgr.begin();
+    Serial.println("[BOOT] Initializing DFPlayer Mini...");
+    audioMgr.begin();
+
+    languageChosen = false;
+    sysStatus.currentScreen = SCREEN_LANGUAGE;
+    showScreen(SCREEN_LANGUAGE);  // "SELECT LANGUAGE" — keys 1-6 (handleLanguageKey)
 
     // Peltier drivers (all off by default)
     Serial.println("[BOOT] Initializing BTS7960 outputs...");
@@ -258,10 +271,6 @@ void setup() {
     Serial.println("[BOOT] Initializing SHT3x sensor (temperature + humidity)...");
     bool sensorOK = tempMgr.begin();
     sysStatus.sensorValid = sensorOK;
-
-    // Keypad
-    Serial.println("[BOOT] Initializing keypad...");
-    keypadMgr.begin();
 
     // Recipe (loads from NVS or creates defaults)
     Serial.println("[BOOT] Loading recipe from NVS...");
@@ -291,10 +300,6 @@ void setup() {
     Serial.printf("[BOOT] Power ratios: BOT=%.0f%% MID=%.0f%% TOP=%.0f%%\n",
                   botR * 100.0f, midR * 100.0f, topR * 100.0f);
 
-    // Audio (DFPlayer Mini)
-    Serial.println("[BOOT] Initializing DFPlayer Mini...");
-    audioMgr.begin();
-
     // Safety manager
     safetyMgr.begin();
 
@@ -320,21 +325,14 @@ void setup() {
     Serial.println("[BOOT] ==============================");
     Serial.println();
 
-    // Transition to IDLE state
+    // Transition to IDLE state. The screen stays on SELECT LANGUAGE until the
+    // operator presses 1-6; the welcome + "system ready" voice then play in
+    // that language and the home screen opens (handleLanguageKey).
     sysStatus.state = STATE_IDLE;
-    sysStatus.currentScreen = SCREEN_HOME;
-
-    // Show initial home screen
     sysStatus.filteredTemp = tempMgr.getFilteredTemp();
     sysStatus.actualTemp = tempMgr.getRawTemp();
-    showScreen(SCREEN_HOME);
 
-    // Announce system start ("Welcome to THULIR CryoLab" - Track 7)
-    audioMgr.announceWelcome();
-
-    // If sensor failed at boot, show warning
     if (!sensorOK) {
-        displayMgr.showMessage("SENSOR NOT FOUND!", COLOR_STATUS_ERR);
         Serial.println("[BOOT] WARNING: Temperature sensor not found at boot");
     }
 }
@@ -502,8 +500,33 @@ void handleKeypress(char key) {
         case SCREEN_COMPLETE:       handleCompleteKey(key); break;
         case SCREEN_STOPPED:        handleStoppedKey(key); break;
         case SCREEN_MANUAL_PWM:     handleManualPWMKey(key); break;
+        case SCREEN_LANGUAGE:       handleLanguageKey(key); break;
         default: break;
     }
+}
+
+// --- LANGUAGE SELECT SCREEN (after splash; also reachable from Settings) ---
+void handleLanguageKey(char key) {
+    if (key >= '1' && key <= '6') {
+        uint8_t lang = (uint8_t)(key - '0');
+        audioMgr.setLanguage(lang);
+        bool firstSelection = !languageChosen;
+        languageChosen = true;
+        showScreen(SCREEN_HOME);
+        displayMgr.showMessage(AudioManager::languageName(lang), COLOR_STATUS_OK);
+        if (firstSelection) {
+            audioMgr.announceWelcome();        // 0001, then
+            audioMgr.announceSystemReady();    // 0015 once the welcome ends
+            if (!sysStatus.sensorValid) {      // boot-time sensor problem
+                displayMgr.showMessage("SENSOR NOT FOUND!", COLOR_STATUS_ERR);
+            }
+        } else {
+            audioMgr.announceWelcome();        // confirms the new language
+        }
+    } else if (key == KEY_BACK && languageChosen) {
+        showScreen(SCREEN_MENU);               // came from Settings: leave unchanged
+    }
+    // At boot (nothing chosen yet) only keys 1-6 are accepted.
 }
 
 // --- HOME SCREEN ---
@@ -548,8 +571,8 @@ void handleMenuKey(char key) {
                 }
                 break;
             case MENU_SETTINGS:
-                // Future: settings submenu
-                displayMgr.showMessage("Settings: Use PID/CAL screens", COLOR_TEXT_DIM);
+                // Settings = change the voice language (PID/CAL have own menu items)
+                showScreen(SCREEN_LANGUAGE);
                 break;
             case MENU_PID_TUNE:
                 showScreen(SCREEN_PID);
@@ -1115,6 +1138,8 @@ void enterRampState() {
     sysStatus.rampLagAmount = 0.0f;
     sysStatus.currentStep = 5;
 
+    audioMgr.announceRampStarted();          // "deep freeze initiated"
+
     // Set initial setpoint to current temperature
     sysStatus.currentSetpoint = sysStatus.rampStartTemp;
     sysStatus.targetTemp = RAMP_FINAL_TARGET;
@@ -1258,6 +1283,7 @@ void updateHoldState() {
                 sysStatus.holdTimerRunning = false;
                 Serial.printf("[STEP %d] Hold timer PAUSED (temp deviation: %.1f°C)\n",
                               sysStatus.currentStep, sysStatus.filteredTemp);
+                audioMgr.announceTempDeviation();   // "temperature deviation"
             }
         }
     #else
