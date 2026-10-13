@@ -1046,6 +1046,12 @@ void startProcess() {
     Serial.printf("[PROCESS] Ambient reference for feedforward: %.1f °C\n",
                   sysStatus.filteredTemp);
 
+    // Close the lid (servo) now that the checks passed — the chamber must be
+    // sealed while cooling. (It opens at boot for loading and for 15 s after
+    // each step; without this it would stay open through all of Step 1.)
+    servoMgr.closeServos();
+    sysStatus.servoStepTimerActive = false;
+
     // Reset PID
     pid.reset();
 

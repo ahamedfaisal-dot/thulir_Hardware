@@ -508,12 +508,16 @@
 //    Servo 1  Signal → GPIO SERVO1_PIN   VCC → 5V   GND → GND
 //    Servo 2  Signal → GPIO SERVO2_PIN   VCC → 5V   GND → GND
 //
-//  GPIO 22 and GPIO 23 are free general-purpose outputs on the
-//  ESP32-S3-DevKitC-1 (not strapping pins, not USB, not PSRAM,
-//  not used by any other subsystem in this firmware).
-//  Change these if your board layout requires different pins.
-#define SERVO1_PIN            22   // Servo 1 PWM signal
-#define SERVO2_PIN            23   // Servo 2 PWM signal
+//  NOTE: GPIO 22-25 DO NOT EXIST on the ESP32-S3 (the old 22/23 were from the
+//  classic ESP32), so nothing could ever drive the servo on them.
+//  One MG996R is used, on GPIO15 (left header, between 7 and 16): a free,
+//  non-strapping pin that no other subsystem uses. SERVO2_PIN = 255 means
+//  "second servo not fitted" (ServoManager skips it).
+//  MG996R POWER: it needs 5-6 V and can pull 1-2 A when it moves/stalls.
+//  Feed it from its OWN 5-6 V supply (NOT the ESP32 5V pin), and join that
+//  supply's GND to the ESP32 GND. Only the signal wire goes to GPIO15.
+#define SERVO1_PIN            15   // Servo 1 PWM signal (MG996R)
+#define SERVO2_PIN            255  // not fitted
 
 //  Servo angle definitions (degrees, standard 0–180 range).
 //  Adjust OPEN/CLOSED angles to match your physical servo
@@ -536,7 +540,8 @@
 #define SERVO1_LEDC_CHANNEL    4
 #define SERVO2_LEDC_CHANNEL    5
 #define SERVO_LEDC_FREQ        50   // Hz (standard hobby servo)
-#define SERVO_LEDC_RES         16   // bits → 0–65535 duty range
+#define SERVO_LEDC_RES         14   // bits → 0–16383 (ESP32-S3 LEDC max is 14; 16 FAILS:
+                                    //   "LEDC is not initialized" and the servo never moves)
 
 // ============================================================
 //  TFT DISPLAY COLORS (RGB565)

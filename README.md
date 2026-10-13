@@ -106,7 +106,7 @@ Production-quality firmware for ESP32-S3 driving three cascaded Peltier modules 
 |                                            | ROW1          | GPIO 17                    |                                                                                                                                                                           |
 |                                            | ROW2          | GPIO 18                    |                                                                                                                                                                           |
 |                                            | ROW3          | GPIO 38                    | (Moved from 19 — USB)                                                                                                                                                    |
-|                                            | COL0          | GPIO 20                    |                                                                                                                                                                           |
+|                                            | pp.pyCOL0     | GPIO 20                    |                                                                                                                                                                           |
 |                                            | COL1          | GPIO 39                    |                                                                                                                                                                           |
 |                                            | COL2          | GPIO 40                    |                                                                                                                                                                           |
 |                                            | COL3          | GPIO 41                    |                                                                                                                                                                           |
@@ -421,13 +421,13 @@ Consider tuning at your most critical operating point (likely Step 5 ramp).
 
 ### Phase 1: Basic Hardware Verification
 
-| # | Step          | Procedure                                    | Expected Result                                   |
-| - | ------------- | -------------------------------------------- | ------------------------------------------------- |
-| 1 | Test ESP32-S3 | Upload blink sketch, check Serial Monitor    | Serial output at 115200 baud                      |
-| 2 | Test TFT      | Upload THULIR firmware, check for boot screen | "THULIR Initializing..." on display                |
-| 3 | Test Keypad   | Press keys on HOME screen, go to Menu        | Keys register, menu navigates                     |
-| 4 | Test SHT3x    | Check boot log for sensor detection          | "SHT3x initialized" with a plausible temp/RH pair |
-| 5 | Test DFPlayer | Menu → Test → 4 (Test DFPlayer)            | "System starting" audio plays                     |
+| # | Step          | Procedure                                     | Expected Result                                   |
+| - | ------------- | --------------------------------------------- | ------------------------------------------------- |
+| 1 | Test ESP32-S3 | Upload blink sketch, check Serial Monitor     | Serial output at 115200 baud                      |
+| 2 | Test TFT      | Upload THULIR firmware, check for boot screen | "THULIR Initializing..." on display               |
+| 3 | Test Keypad   | Press keys on HOME screen, go to Menu         | Keys register, menu navigates                     |
+| 4 | Test SHT3x    | Check boot log for sensor detection           | "SHT3x initialized" with a plausible temp/RH pair |
+| 5 | Test DFPlayer | Menu → Test → 4 (Test DFPlayer)             | "System starting" audio plays                     |
 
 ### Phase 2: Motor Driver Verification (No Peltier Connected)
 
@@ -691,16 +691,16 @@ All predictions run server-side in pure Python (no ML frameworks needed).
 
 ### API Endpoints
 
-| Endpoint         | Method | Description                       |
-| ---------------- | ------ | --------------------------------- |
-| `/`            | GET    | Live dashboard UI                 |
-| `/api/data`    | POST   | ESP32 telemetry receiver          |
-| `/api/latest`  | GET    | Last received telemetry (JSON)    |
-| `/api/predict` | GET    | Latest ML predictions only (JSON) |
-| `/api/export`  | GET    | Excel export of the latest run    |
-| `/api/runs`, `/api/runs/<id>/export` | GET | Run history / per-run Excel |
-| `/api/protocols` | GET/POST/PUT/DELETE | Protocol management |
-| `/api/command` | POST   | Queue START / ABORT for the device |
+| Endpoint                                 | Method              | Description                        |
+| ---------------------------------------- | ------------------- | ---------------------------------- |
+| `/`                                    | GET                 | Live dashboard UI                  |
+| `/api/data`                            | POST                | ESP32 telemetry receiver           |
+| `/api/latest`                          | GET                 | Last received telemetry (JSON)     |
+| `/api/predict`                         | GET                 | Latest ML predictions only (JSON)  |
+| `/api/export`                          | GET                 | Excel export of the latest run     |
+| `/api/runs`, `/api/runs/<id>/export` | GET                 | Run history / per-run Excel        |
+| `/api/protocols`                       | GET/POST/PUT/DELETE | Protocol management                |
+| `/api/command`                         | POST                | Queue START / ABORT for the device |
 
 ---
 

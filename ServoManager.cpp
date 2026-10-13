@@ -8,16 +8,16 @@
  *
  *  Servo pulse width calculation:
  *    Period     = 1/50 Hz = 20,000 µs
- *    Resolution = 16 bits → 65536 ticks per period
- *    Tick width = 20000 µs / 65536 ≈ 0.3052 µs per tick
+ *    Resolution = 14 bits → 16384 ticks per period (ESP32-S3 max is 14)
+ *    Tick width = 20000 µs / 16384 ≈ 1.22 µs per tick
  *
- *    0°   → 500 µs  → duty = 500  / 20000 × 65536 ≈  1638
- *    90°  → 1450 µs → duty = 1450 / 20000 × 65536 ≈  4751
- *    180° → 2400 µs → duty = 2400 / 20000 × 65536 ≈  7864
+ *    0°   → 500 µs  → duty = 500  / 20000 × 16384 ≈  410
+ *    90°  → 1450 µs → duty = 1450 / 20000 × 16384 ≈ 1188
+ *    180° → 2400 µs → duty = 2400 / 20000 × 16384 ≈ 1966
  *
  *    General formula:
  *      pulse_us = 500 + (angle / 180.0) × 1900
- *      duty     = pulse_us / 20000.0 × 65536
+ *      duty     = pulse_us / 20000.0 × 2^SERVO_LEDC_RES
  *
  * ============================================================
  */
@@ -36,8 +36,9 @@ void ServoManager::_writeAngle(uint8_t channel, uint8_t angle) {
     // 0° → 500 µs,  180° → 2400 µs  (standard hobby servo range)
     uint32_t pulse_us = 500UL + ((uint32_t)angle * 1900UL) / 180UL;
 
-    // Map pulse width → 16-bit LEDC duty (20 ms period = 20000 µs)
-    uint32_t duty = (pulse_us * 65536UL) / 20000UL;
+    // Map pulse width → LEDC duty (20 ms period = 20000 µs).
+    // SERVO_LEDC_RES is 14 bits: the ESP32-S3 LEDC cannot do more than 14.
+    uint32_t duty = (pulse_us * (1UL << SERVO_LEDC_RES)) / 20000UL;
 
     ledcWrite(channel, duty);
 }
@@ -48,19 +49,23 @@ void ServoManager::_writeAngle(uint8_t channel, uint8_t angle) {
 void ServoManager::begin() {
     // Configure LEDC channels for servo PWM
     ledcSetup(SERVO1_LEDC_CHANNEL, SERVO_LEDC_FREQ, SERVO_LEDC_RES);
-    ledcSetup(SERVO2_LEDC_CHANNEL, SERVO_LEDC_FREQ, SERVO_LEDC_RES);
-
     ledcAttachPin(SERVO1_PIN, SERVO1_LEDC_CHANNEL);
-    ledcAttachPin(SERVO2_PIN, SERVO2_LEDC_CHANNEL);
-
     Serial.printf("[SERVO] Servo 1 → GPIO %d (LEDC ch %d)\n",
                   SERVO1_PIN, SERVO1_LEDC_CHANNEL);
-    Serial.printf("[SERVO] Servo 2 → GPIO %d (LEDC ch %d)\n",
-                  SERVO2_PIN, SERVO2_LEDC_CHANNEL);
 
-    // Open both servos on power-on
+    // Servo 2 is optional: SERVO2_PIN = 255 means "not fitted"
+    if (SERVO2_PIN != 255) {
+        ledcSetup(SERVO2_LEDC_CHANNEL, SERVO_LEDC_FREQ, SERVO_LEDC_RES);
+        ledcAttachPin(SERVO2_PIN, SERVO2_LEDC_CHANNEL);
+        Serial.printf("[SERVO] Servo 2 → GPIO %d (LEDC ch %d)\n",
+                      SERVO2_PIN, SERVO2_LEDC_CHANNEL);
+    } else {
+        Serial.println("[SERVO] Servo 2 not fitted (SERVO2_PIN = 255)");
+    }
+
+    // Open the servo(s) on power-on
     openServos();
-    Serial.println("[SERVO] Both servos OPEN (power-on)");
+    Serial.println("[SERVO] OPEN (power-on)");
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +73,7 @@ void ServoManager::begin() {
 // ---------------------------------------------------------------------------
 void ServoManager::openServos() {
     _writeAngle(SERVO1_LEDC_CHANNEL, SERVO_OPEN_ANGLE);
-    _writeAngle(SERVO2_LEDC_CHANNEL, SERVO_OPEN_ANGLE);
+    if (SERVO2_PIN != 255) _writeAngle(SERVO2_LEDC_CHANNEL, SERVO_OPEN_ANGLE);
     _open = true;
     Serial.printf("[SERVO] OPEN (%d°)\n", SERVO_OPEN_ANGLE);
 }
@@ -78,7 +83,7 @@ void ServoManager::openServos() {
 // ---------------------------------------------------------------------------
 void ServoManager::closeServos() {
     _writeAngle(SERVO1_LEDC_CHANNEL, SERVO_CLOSED_ANGLE);
-    _writeAngle(SERVO2_LEDC_CHANNEL, SERVO_CLOSED_ANGLE);
+    if (SERVO2_PIN != 255) _writeAngle(SERVO2_LEDC_CHANNEL, SERVO_CLOSED_ANGLE);
     _open = false;
     Serial.printf("[SERVO] CLOSED (%d°)\n", SERVO_CLOSED_ANGLE);
 }
