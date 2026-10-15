@@ -10,8 +10,8 @@
  *  Peltiers   : 3× cascaded (Bottom 12A / Middle 6A / Top 6A)
  *  Drivers    : 3× BTS7960 H-bridge (unidirectional cooling)
  *               RPWM only — LPWM/R_EN/L_EN all hardwired to GND/3.3V
- *  Servos     : 2× hobby servo (SG90/MG90S, 5V) on GPIO 22 and 23
- *               Open on power-on; open 15 s on each step completion;
+ *  Servos     : 2× hobby servo via PCA9685 I2C driver (ch 0 and 1)
+ *               Open on power-on; open 10 s on each step completion;
  *               close on process complete; open on fault/stop
  *  Display    : 2.8" ILI9341 SPI TFT 320×240
  *  Input      : 4×4 matrix keypad
@@ -504,44 +504,46 @@
 //      and stay closed (peltiers off, chamber sealed)
 //    • EMERGENCY STOP / FAULT → both servos OPEN (safe egress)
 //
-//  Wiring (3-wire hobby servo — signal / VCC / GND):
-//    Servo 1  Signal → GPIO SERVO1_PIN   VCC → 5V   GND → GND
-//    Servo 2  Signal → GPIO SERVO2_PIN   VCC → 5V   GND → GND
+//  Servos are driven through a PCA9685 16-channel I2C PWM board, so the
+//  ESP32 needs no servo GPIOs — only the I2C bus it already uses for the
+//  SHT3x (SDA = GPIO35, SCL = GPIO36). PCA9685 default address 0x40;
+//  SHT3x is 0x44, so they share the bus without conflict.
 //
-//  NOTE: GPIO 22-25 DO NOT EXIST on the ESP32-S3 (the old 22/23 were from the
-//  classic ESP32), so nothing could ever drive the servo on them.
-//  One MG996R is used, on GPIO15 (left header, between 7 and 16): a free,
-//  non-strapping pin that no other subsystem uses. SERVO2_PIN = 255 means
-//  "second servo not fitted" (ServoManager skips it).
-//  MG996R POWER: it needs 5-6 V and can pull 1-2 A when it moves/stalls.
-//  Feed it from its OWN 5-6 V supply (NOT the ESP32 5V pin), and join that
-//  supply's GND to the ESP32 GND. Only the signal wire goes to GPIO15.
-#define SERVO1_PIN            15   // Servo 1 PWM signal (MG996R)
-#define SERVO2_PIN            255  // not fitted
+//  Wiring:
+//    PCA9685 VCC → ESP32 3.3V   (logic only)
+//    PCA9685 GND → ESP32 GND  AND servo supply GND (common ground)
+//    PCA9685 SDA → GPIO35,  SCL → GPIO36
+//    PCA9685 V+ (green terminal) → separate 5-6 V servo supply (+)
+//    Servo 1 → PCA9685 channel 0,  Servo 2 → channel 1
+//    (OE pin left unconnected)
+//  Servo power must NOT come from the ESP32 5V pin — servos draw 1 A+ on
+//  stall/start-up and will brown-out the ESP32.
+#define SERVO_PCA9685_ADDR     0x40
+#define SERVO1_CHANNEL         0    // PCA9685 channel for lid flap 1
+#define SERVO2_CHANNEL         1    // PCA9685 channel for lid flap 2
+#define SERVO2_ENABLED         true // false → only servo 1 is driven
 
-//  Servo angle definitions (degrees, standard 0–180 range).
-//  Adjust OPEN/CLOSED angles to match your physical servo
-//  mounting — swap them if the direction is reversed.
-#define SERVO_OPEN_ANGLE      90   // degrees — lid/door fully open
-#define SERVO_CLOSED_ANGLE     0   // degrees — lid/door fully closed
+//  Servo pulse range (µs). Trim if the servo buzzes at the end stops.
+#define SERVO_MIN_PULSE_US     500
+#define SERVO_MAX_PULSE_US     2400
+
+//  Per-servo angles (degrees, 0–180), calibrated with Servo_Test.ino.
+//    OPEN   : servo1=90  servo2=90
+//    CLOSED : servo1=0   servo2=180
+#define SERVO1_OPEN_ANGLE      90
+#define SERVO1_CLOSED_ANGLE     0
+#define SERVO2_OPEN_ANGLE      90
+#define SERVO2_CLOSED_ANGLE   180
+
+//  Sequenced movement so the two flaps never collide:
+//    OPEN  : servo 1 first, then servo 2 after SERVO_SEQ_DELAY_MS
+//    CLOSE : servo 2 first, then servo 1 after SERVO_SEQ_DELAY_MS
+//  Make the delay long enough for the first flap to finish moving.
+#define SERVO_SEQ_DELAY_MS     800
 
 //  How long the servo stays open on step completion (ms).
 //  After this window, the servo closes automatically.
-#define SERVO_STEP_OPEN_MS  15000  // 15 seconds
-
-//  ESP32 LEDC channel assignments for servo PWM.
-//  Must not conflict with BTS7960 LEDC channels (0/1/2 used by
-//  PeltierControl).
-//  IMPORTANT: LEDC channels share a hardware timer in pairs
-//  (0/1, 2/3, 4/5, 6/7). Servos run 50 Hz / 16-bit, Peltiers 5 kHz / 10-bit,
-//  so they must NOT share a timer. Channel 3 shares a timer with Peltier
-//  channel 2 (TOP stage) and would silently reconfigure it to 50 Hz,
-//  leaving the TOP stage almost unpowered. Use 4 and 5 (their own timer).
-#define SERVO1_LEDC_CHANNEL    4
-#define SERVO2_LEDC_CHANNEL    5
-#define SERVO_LEDC_FREQ        50   // Hz (standard hobby servo)
-#define SERVO_LEDC_RES         14   // bits → 0–16383 (ESP32-S3 LEDC max is 14; 16 FAILS:
-                                    //   "LEDC is not initialized" and the servo never moves)
+#define SERVO_STEP_OPEN_MS  10000  // 10 seconds (automatic pipetting window)
 
 // ============================================================
 //  TFT DISPLAY COLORS (RGB565)
