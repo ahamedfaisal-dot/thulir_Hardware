@@ -75,6 +75,12 @@ private:
     unsigned long _lastKeyTime;
     NumericInput _numInput;
 
+    // Hold-to-type alternates for the dead column (see KEYPAD_COL0_DEAD)
+    bool _altFired[4] = { false, false, false, false };   // per alt key: hold already used
+    static char _altOf(char k);          // 2->1 5->4 8->7 0->*, else '\0'
+    static int8_t _altIdx(char k);       // index into _altFired, or -1
+    static bool _isDead(char k);         // 1 4 7 *
+
     // Keypad configuration (static for Keypad library)
     static const byte ROWS = 4;
     static const byte COLS = 4;

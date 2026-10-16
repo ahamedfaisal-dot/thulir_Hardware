@@ -125,7 +125,7 @@ void DisplayManager::drawScreen(ScreenID screen, const SystemStatus& status,
             _homeFrameReady = true;
             break;
         case SCREEN_MENU:           drawMenuScreen(status); break;
-        case SCREEN_PROGRAM:        drawProgramScreen(recipe); break;
+        case SCREEN_PROGRAM:        drawProgramScreen(recipe, status.editStep); break;
         case SCREEN_STEP_EDIT:      drawStepEditScreen(status, recipe); break;
         case SCREEN_CONFIRM_START:  drawConfirmStartScreen(); break;
         case SCREEN_CONFIRM_STOP:   drawConfirmStopScreen(); break;
@@ -507,6 +507,7 @@ void DisplayManager::drawMenuScreen(const SystemStatus& status) {
         int y = 44 + i * 24;
         bool selected = (i == status.menuSelection);
 
+        _tft->setTextSize(2);   // reset every row — previous row left it at 2, first row at 1
         if (selected) {
             _tft->fillRect(0, y - 2, 320, 20, COLOR_MENU_SEL_BG);
             _tft->setTextColor(COLOR_TEMP_ACTUAL);
@@ -533,7 +534,7 @@ void DisplayManager::drawMenuScreen(const SystemStatus& status) {
 //  PROGRAM SCREEN — Recipe step overview
 // ============================================================
 
-void DisplayManager::drawProgramScreen(const Recipe& recipe) {
+void DisplayManager::drawProgramScreen(const Recipe& recipe, uint8_t selectedStep) {
     drawHeader();
     drawDivider(22);
 
@@ -549,10 +550,15 @@ void DisplayManager::drawProgramScreen(const Recipe& recipe) {
     for (int i = 0; i < 5; i++) {
         int y = 44 + i * 28;
 
+        // Highlight the row A/B has selected (steps 1-4 only; step 5 is fixed)
+        if (i == selectedStep && i < 4) {
+            _tft->fillRect(0, y - 4, 320, 18, COLOR_MENU_SEL_BG);
+        }
+
         _tft->setTextSize(1);
         _tft->setTextColor(COLOR_TEXT_SECONDARY);
         _tft->setCursor(10, y);
-        snprintf(buf, sizeof(buf), "STEP %d:", i + 1);
+        snprintf(buf, sizeof(buf), "%sSTEP %d:", (i == selectedStep && i < 4) ? ">" : " ", i + 1);
         _tft->print(buf);
 
         _tft->setTextColor(COLOR_TEMP_ACTUAL);

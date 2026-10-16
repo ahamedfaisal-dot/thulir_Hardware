@@ -117,7 +117,7 @@ private:
     // Screen-specific draw functions
     void drawHomeScreen(const SystemStatus& status);
     void drawMenuScreen(const SystemStatus& status);
-    void drawProgramScreen(const Recipe& recipe);
+    void drawProgramScreen(const Recipe& recipe, uint8_t selectedStep);
     void drawStepEditScreen(const SystemStatus& status, const Recipe& recipe);
     void drawConfirmStartScreen();
     void drawConfirmStopScreen();

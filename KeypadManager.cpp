@@ -36,18 +36,76 @@ void KeypadManager::begin() {
 
     // Set debounce and hold times
     _keypad->setDebounceTime(50);
-    _keypad->setHoldTime(800);
+    _keypad->setHoldTime(KEYPAD_ALT_HOLD_MS);
 
     Serial.println("[KEYPAD] 4x4 matrix keypad initialized");
+#if KEYPAD_COL0_DEAD
+    Serial.println("[KEYPAD] Column 0 DEAD: hold 2->1, 5->4, 8->7, 0->*");
+#endif
     Serial.printf("[KEYPAD] Rows: GPIO %d,%d,%d,%d  Cols: GPIO %d,%d,%d,%d\n",
                   KP_ROW0_PIN, KP_ROW1_PIN, KP_ROW2_PIN, KP_ROW3_PIN,
                   KP_COL0_PIN, KP_COL1_PIN, KP_COL2_PIN, KP_COL3_PIN);
 }
 
+char KeypadManager::_altOf(char k) {
+    switch (k) {
+        case '2': return '1';
+        case '5': return '4';
+        case '8': return '7';
+        case '0': return '*';
+        default:  return '\0';
+    }
+}
+
+int8_t KeypadManager::_altIdx(char k) {
+    switch (k) {
+        case '2': return 0;
+        case '5': return 1;
+        case '8': return 2;
+        case '0': return 3;
+        default:  return -1;
+    }
+}
+
+bool KeypadManager::_isDead(char k) {
+    return k == '1' || k == '4' || k == '7' || k == '*';
+}
+
 char KeypadManager::update() {
     if (!_keypad) return '\0';
 
-    char key = _keypad->getKey();
+    char key = '\0';
+
+#if KEYPAD_COL0_DEAD
+    // Column 0 is damaged. Ignore 1/4/7/* entirely (a half-broken contact can
+    // also chatter), and make 2/5/8/0 two-function keys:
+    //   tap  -> the digit itself, reported on RELEASE
+    //   hold -> the dead neighbour to the left (1/4/7/*), reported at hold time
+    if (_keypad->getKeys()) {
+        for (int i = 0; i < LIST_MAX; i++) {
+            if (!_keypad->key[i].stateChanged) continue;
+            char     k  = _keypad->key[i].kchar;
+            KeyState st = _keypad->key[i].kstate;
+
+            if (_isDead(k)) continue;                    // broken contacts
+
+            int8_t ai = _altIdx(k);
+            if (ai < 0) {
+                if (st == PRESSED) key = k;              // all other keys: normal
+                continue;
+            }
+            if (st == HOLD) {
+                key = _altOf(k);
+                _altFired[ai] = true;
+            } else if (st == RELEASED) {
+                if (!_altFired[ai]) key = k;             // plain tap
+                _altFired[ai] = false;
+            }
+        }
+    }
+#else
+    key = _keypad->getKey();
+#endif
 
     if (key) {
         _lastKey = key;

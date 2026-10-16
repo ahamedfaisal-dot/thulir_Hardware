@@ -274,6 +274,15 @@
 #define KP_COL2_PIN        40
 #define KP_COL3_PIN        41
 
+//  Damaged keypad column 0 (keys 1, 4, 7, *): the contacts are pinched out.
+//  When true, those four physical keys are IGNORED and replaced by a
+//  press-and-HOLD on the key to their right (same row):
+//      hold 2 -> 1      hold 5 -> 4      hold 8 -> 7      hold 0 -> *
+//  A quick tap of 2 / 5 / 8 / 0 still types the normal digit (it registers
+//  when the key is released). Set false once the keypad is repaired.
+#define KEYPAD_COL0_DEAD       true
+#define KEYPAD_ALT_HOLD_MS     500     // hold time that triggers the alternate
+
 // --- DFPlayer Mini ------------------------------------------
 //  Uses hardware UART1 on ESP32-S3.
 //  Connect ESP32 TX → DFPlayer RX (via 1kΩ resistor recommended)

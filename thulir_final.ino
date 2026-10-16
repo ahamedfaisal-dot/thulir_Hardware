@@ -709,8 +709,7 @@ void handleConfirmStartKey(char key) {
 // --- CONFIRM STOP ---
 void handleConfirmStopKey(char key) {
     if (key == KEY_ENTER) {
-        safetyMgr.emergencyStop(peltier, audioMgr, sysStatus);
-        showScreen(SCREEN_STOPPED);
+        stopProcess();   // emergency stop + opens the door (shows SCREEN_STOPPED)
     }
     else if (key == KEY_BACK) {
         showScreen(SCREEN_HOME);
@@ -1047,7 +1046,7 @@ void startProcess() {
                   sysStatus.filteredTemp);
 
     // Close the lid (servo) now that the checks passed — the chamber must be
-    // sealed while cooling. (It opens at boot for loading and for 15 s after
+    // sealed while cooling. (It opens at boot for loading and for 10 s after
     // each step; without this it would stay open through all of Step 1.)
     servoMgr.closeServos();
     sysStatus.servoStepTimerActive = false;
@@ -1316,6 +1315,8 @@ void updateRampState() {
         Serial.printf("[STEP 5] RAMP TIMEOUT after %lu min — target unreachable\n",
                       (now - sysStatus.rampStartTime) / 60000UL);
         safetyMgr.triggerRampTimeoutFault(peltier, audioMgr, sysStatus);
+        servoMgr.openServos();   // safe egress — the generic fault hook below misses this path
+        sysStatus.servoStepTimerActive = false;
         showScreen(SCREEN_FAULT);
         return;
     }
